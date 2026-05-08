@@ -8,11 +8,37 @@ import { useStore } from '../../store'
 import { useShallow } from 'zustand/react/shallow'
 import type { Task } from '../../types/task'
 
-const STATUS_COLORS = {
-  pending: { bar: '#3b82f6', text: 'white', bg: '#dbeafe', label: 'Pendente' },
-  in_progress: { bar: '#f59e0b', text: 'white', bg: '#fef3c7', label: 'Em andamento' },
-  completed: { bar: '#10b981', text: 'white', bg: '#d1fae5', label: 'Concluído' },
-  delayed: { bar: '#ef4444', text: 'white', bg: '#fee2e2', label: 'Atrasado' },
+// Paleta de 12 cores distintas para identificar tarefas individualmente
+const TASK_PALETTE = [
+  '#3b82f6', // blue
+  '#8b5cf6', // violet
+  '#f59e0b', // amber
+  '#10b981', // emerald
+  '#ec4899', // pink
+  '#06b6d4', // cyan
+  '#f97316', // orange
+  '#6366f1', // indigo
+  '#14b8a6', // teal
+  '#a855f7', // purple
+  '#84cc16', // lime
+  '#ef4444', // red (reservado mas disponível se necessário)
+]
+
+// Cor determinística baseada no ID da tarefa — sempre a mesma cor para o mesmo ID
+function taskColor(id: string): string {
+  let hash = 0
+  for (let i = 0; i < id.length; i++) {
+    hash = (hash * 31 + id.charCodeAt(i)) >>> 0
+  }
+  // Evita o vermelho (índice 11) para não confundir com "Atrasado"
+  return TASK_PALETTE[hash % (TASK_PALETTE.length - 1)]
+}
+
+const STATUS_META = {
+  pending:     { label: 'Pendente',      opacity: 1,    borderColor: null },
+  in_progress: { label: 'Em andamento',  opacity: 1,    borderColor: '#fbbf24' },
+  completed:   { label: 'Concluído',     opacity: 0.55, borderColor: '#34d399' },
+  delayed:     { label: 'Atrasado',      opacity: 1,    borderColor: '#ef4444' },
 }
 
 interface Props {
@@ -36,70 +62,104 @@ export function TaskBar({ task, left, width }: Props) {
     data: { type: 'task', task },
   })
 
+  const barColor = taskColor(task.id)
+  const meta = STATUS_META[task.status]
+  const minWidth = width >= 80
+
   const style = {
     position: 'absolute' as const,
     left,
     width: Math.max(width, 60),
-    top: 8,
-    height: 32,
+    top: 6,
+    height: 36,
     transform: CSS.Transform.toString(transform),
     transition,
     zIndex: isDragging ? 50 : hovered ? 10 : 1,
-    opacity: isDragging ? 0.8 : 1,
+    opacity: isDragging ? 0.7 : meta.opacity,
   }
-
-  const colors = STATUS_COLORS[task.status]
-  const minWidth = width >= 100
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className="task-bar rounded-md cursor-grab active:cursor-grabbing select-none"
+      className="task-bar cursor-grab active:cursor-grabbing select-none"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       {...attributes}
       {...listeners}
     >
-      {/* Bar body */}
+      {/* Borda de status à esquerda */}
       <div
-        className="w-full h-full rounded-md flex items-center px-2 gap-1 overflow-hidden"
-        style={{ backgroundColor: colors.bar }}
+        className="w-full h-full rounded-md flex items-center px-2 gap-1.5 overflow-hidden relative"
+        style={{
+          backgroundColor: barColor,
+          // Borda esquerda grossa indica o status
+          boxShadow: meta.borderColor
+            ? `inset 3px 0 0 0 ${meta.borderColor}, 0 1px 3px rgba(0,0,0,0.25)`
+            : '0 1px 3px rgba(0,0,0,0.2)',
+          outline: `1px solid rgba(0,0,0,0.15)`,
+        }}
       >
-        {task.status === 'delayed' && <AlertTriangle size={11} className="shrink-0 text-white/90" />}
-        {task.status === 'completed' && <CheckCircle size={11} className="shrink-0 text-white/90" />}
-        {task.status === 'in_progress' && <PlayCircle size={11} className="shrink-0 text-white/90" />}
+        {/* Ícone de status */}
+        {task.status === 'delayed'     && <AlertTriangle size={11} className="shrink-0 text-white" />}
+        {task.status === 'completed'   && <CheckCircle   size={11} className="shrink-0 text-white" />}
+        {task.status === 'in_progress' && <PlayCircle    size={11} className="shrink-0 text-white" />}
+
+        {/* Título */}
         {minWidth && (
-          <span className="text-xs text-white font-medium truncate leading-none">{task.title}</span>
+          <span className="text-xs text-white font-semibold truncate leading-none drop-shadow-sm">
+            {task.title}
+          </span>
         )}
+
+        {/* Badge "Atrasado" */}
         {task.status === 'delayed' && minWidth && (
-          <span className="text-xs text-white/80 font-semibold ml-auto shrink-0">Atrasado</span>
+          <span className="ml-auto shrink-0 text-xs font-bold text-white/90 bg-red-600/70 px-1 rounded">
+            Atrasado
+          </span>
+        )}
+
+        {/* Risco diagonal para concluído */}
+        {task.status === 'completed' && (
+          <div
+            className="absolute inset-0 rounded-md pointer-events-none"
+            style={{
+              backgroundImage: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.1) 0px, rgba(255,255,255,0.1) 2px, transparent 2px, transparent 8px)',
+            }}
+          />
         )}
       </div>
 
-      {/* Hover tooltip */}
+      {/* Tooltip ao passar o mouse */}
       {hovered && (
         <div
           className="absolute bottom-full left-0 mb-2 z-50 bg-gray-900 text-white rounded-lg shadow-xl p-3 min-w-52 pointer-events-none"
           style={{ maxWidth: 280 }}
-          onMouseDown={(e) => e.stopPropagation()}
         >
-          <div className="font-semibold text-sm mb-1">{task.title}</div>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: barColor }} />
+            <span className="font-semibold text-sm">{task.title}</span>
+          </div>
           <div className="text-xs text-gray-300 space-y-1">
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
               <span
-                className="inline-block w-2 h-2 rounded-full"
-                style={{ backgroundColor: colors.bar }}
-              />
-              {colors.label}
+                className="text-xs font-medium px-1.5 py-0.5 rounded"
+                style={{
+                  backgroundColor: meta.borderColor ?? '#6b7280',
+                  color: 'white',
+                }}
+              >
+                {meta.label}
+              </span>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 pt-0.5">
               <Clock size={10} />
               {task.durationHours}h — início: {format(parseISO(task.scheduledStart), "dd/MM HH:mm", { locale: ptBR })}
             </div>
-            {task.notes && <div className="text-gray-400 pt-1">{task.notes}</div>}
+            {task.notes && <div className="text-gray-400 pt-1 border-t border-gray-700">{task.notes}</div>}
           </div>
-          {/* Action buttons */}
+
+          {/* Botões de ação */}
           <div
             className="flex gap-1.5 mt-2 pt-2 border-t border-gray-700 pointer-events-auto"
             onMouseDown={(e) => e.stopPropagation()}
