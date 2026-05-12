@@ -18,6 +18,7 @@ export interface WorkCalendar {
 
 export interface ClientConfig {
   id: string
+  slug: string
   name: string
   poolLabel: string
   poolLabelPlural: string

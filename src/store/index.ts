@@ -3,16 +3,33 @@ import { immer } from 'zustand/middleware/immer'
 import { nanoid } from 'nanoid'
 import {
   addDays, addWeeks, addMonths, startOfDay, startOfWeek, startOfMonth,
-  parseISO, isAfter
+  parseISO, isAfter,
 } from 'date-fns'
 import { rescheduleAll } from '../lib/scheduler'
-import { saveState, loadState } from '../lib/persistence'
 import { getViewportStart } from '../lib/ganttLayout'
+import {
+  loadCompanyBySlug,
+  upsertCompany,
+  deleteCompany as dbDeleteCompany,
+  upsertPool,
+  deletePool as dbDeletePool,
+  upsertProject,
+  deleteProject as dbDeleteProject,
+  upsertTasks,
+  deleteTask as dbDeleteTask,
+  subscribeToCompany,
+  markLocalWrite,
+} from '../lib/supabaseSync'
+import type { CompanyData } from '../lib/supabaseSync'
 import type { ClientConfig } from '../types/client'
 import type { Pool } from '../types/pool'
 import type { Task } from '../types/task'
 import type { Project } from '../types/project'
 import type { View } from '../types/app'
+
+const savedView = (localStorage.getItem('gantt_view') as View | null) ?? 'weekly'
+const savedViewportStart = localStorage.getItem('gantt_viewport')
+  ?? getViewportStart(savedView, new Date()).toISOString()
 
 interface AppState {
   activeClient: string
@@ -30,7 +47,12 @@ interface AppState {
   addingTaskToPoolId: string | null
   showClientSelector: boolean
 
-  setClient: (id: string) => void
+  loaded: boolean
+  loadError: string | null
+
+  loadCompany: (slug: string) => Promise<void>
+  reloadData: (data: CompanyData) => void
+
   setView: (v: View) => void
   setPage: (p: 'gantt' | 'projects') => void
   navigateViewport: (direction: -1 | 1) => void
@@ -40,6 +62,7 @@ interface AppState {
   addClient: (data: Omit<ClientConfig, 'id' | 'createdAt' | 'taskExtraFields'>) => string
   updateClient: (id: string, data: Partial<Omit<ClientConfig, 'id' | 'createdAt'>>) => void
   deleteClient: (id: string) => void
+  setClient: (id: string) => void
 
   addProject: (name: string, color: string) => string
   updateProject: (id: string, data: { name?: string; color?: string }) => void
@@ -62,33 +85,57 @@ interface AppState {
   checkAndPropagateDelays: () => void
 }
 
-const savedState = loadState()
-
-const initialViewportStart = savedState
-  ? savedState.viewportStart
-  : getViewportStart('weekly', new Date()).toISOString()
-
 export const useStore = create<AppState>()(
-  immer((set) => ({
-    activeClient: savedState?.activeClient ?? '',
-    view: savedState?.view ?? 'weekly',
-    viewportStart: initialViewportStart,
+  immer((set, get) => ({
+    activeClient: '',
+    view: savedView,
+    viewportStart: savedViewportStart,
     page: 'gantt',
-    clients: savedState?.clients ?? [],
-    pools: savedState?.pools ?? [],
-    tasks: savedState?.tasks ?? [],
-    projects: savedState?.projects ?? [],
+    clients: [],
+    pools: [],
+    tasks: [],
+    projects: [],
     editingPoolId: null,
     editingTaskId: null,
     addingTaskToPoolId: null,
-    showClientSelector: !savedState || (savedState.clients?.length ?? 0) === 0,
+    showClientSelector: true,
+    loaded: false,
+    loadError: null,
 
-    setClient: (id) => set(s => { s.activeClient = id; s.showClientSelector = false }),
-    setPage: (p) => set(s => { s.page = p }),
+    loadCompany: async (slug: string) => {
+      set(s => { s.loaded = false; s.loadError = null; s.page = 'gantt' })
+      const data = await loadCompanyBySlug(slug)
+      if (!data) {
+        set(s => { s.loadError = `Empresa "${slug}" não encontrada` })
+        return
+      }
+      set(s => {
+        s.clients = [data.company]
+        s.activeClient = data.company.id
+        s.pools = data.pools
+        s.tasks = data.tasks
+        s.projects = data.projects
+        s.loaded = true
+        s.showClientSelector = false
+      })
+      subscribeToCompany(data.company.id, async () => {
+        const fresh = await loadCompanyBySlug(slug)
+        if (fresh) get().reloadData(fresh)
+      })
+    },
+
+    reloadData: (data: CompanyData) => set(s => {
+      s.pools = data.pools
+      s.tasks = data.tasks
+      s.projects = data.projects
+    }),
+
     setView: (v) => set(s => {
       s.view = v
       s.viewportStart = getViewportStart(v, parseISO(s.viewportStart)).toISOString()
+      localStorage.setItem('gantt_view', v)
     }),
+    setPage: (p) => set(s => { s.page = p }),
     navigateViewport: (dir) => set(s => {
       const base = parseISO(s.viewportStart)
       let next: Date
@@ -96,185 +143,204 @@ export const useStore = create<AppState>()(
       else if (s.view === 'weekly') next = startOfWeek(addWeeks(base, dir), { weekStartsOn: 1 })
       else next = startOfMonth(addMonths(base, dir))
       s.viewportStart = next.toISOString()
+      localStorage.setItem('gantt_viewport', s.viewportStart)
     }),
     setViewportStart: (date) => set(s => {
       s.viewportStart = getViewportStart(s.view, date).toISOString()
+      localStorage.setItem('gantt_viewport', s.viewportStart)
     }),
-    setShowClientSelector: (v) => set(s => { s.showClientSelector = v }),
+    setShowClientSelector: () => { window.location.hash = '#/' },
 
     addClient: (data) => {
-      const id = nanoid()
-      set(s => {
-        s.clients.push({ ...data, id, taskExtraFields: [], createdAt: new Date().toISOString() })
-      })
+      const id = crypto.randomUUID()
+      const client: ClientConfig = {
+        ...data,
+        id,
+        taskExtraFields: [],
+        createdAt: new Date().toISOString(),
+      }
+      set(s => { s.clients = [client]; s.activeClient = id })
+      markLocalWrite()
+      upsertCompany(client).catch(console.error)
       return id
     },
-    updateClient: (id, data) => set(s => {
-      const c = s.clients.find(c => c.id === id)
-      if (c) Object.assign(c, data)
-    }),
-    deleteClient: (id) => set(s => {
-      s.clients = s.clients.filter(c => c.id !== id)
-      s.pools = s.pools.filter(p => p.clientId !== id)
-      s.tasks = s.tasks.filter(t => t.clientId !== id)
-      s.projects = s.projects.filter(p => p.clientId !== id)
-      if (s.activeClient === id) {
-        s.activeClient = s.clients[0]?.id ?? ''
-        s.showClientSelector = s.clients.length === 0
-      }
-    }),
+    updateClient: (id, data) => {
+      set(s => {
+        const c = s.clients.find(c => c.id === id)
+        if (c) Object.assign(c, data)
+      })
+      const client = get().clients.find(c => c.id === id)
+      if (client) { markLocalWrite(); upsertCompany(client).catch(console.error) }
+    },
+    deleteClient: (id) => {
+      set(s => {
+        s.clients = s.clients.filter(c => c.id !== id)
+        s.pools = s.pools.filter(p => p.clientId !== id)
+        s.tasks = s.tasks.filter(t => t.clientId !== id)
+        s.projects = s.projects.filter(p => p.clientId !== id)
+        s.loaded = false
+      })
+      markLocalWrite()
+      dbDeleteCompany(id).catch(console.error)
+      window.location.hash = '#/'
+    },
+    setClient: (id) => set(s => { s.activeClient = id }),
 
     addProject: (name, color) => {
       const id = nanoid()
       set(s => {
         s.projects.push({ id, clientId: s.activeClient, name, color, createdAt: new Date().toISOString() })
       })
+      const project = get().projects.find(p => p.id === id)!
+      markLocalWrite(); upsertProject(project).catch(console.error)
       return id
     },
-    updateProject: (id, data) => set(s => {
-      const p = s.projects.find(p => p.id === id)
-      if (p) Object.assign(p, data)
-    }),
-    deleteProject: (id) => set(s => {
-      s.projects = s.projects.filter(p => p.id !== id)
-      s.tasks.forEach(t => { if (t.projectId === id) delete t.projectId })
-    }),
-
-    addPool: (name) => set(s => {
-      const maxOrder = s.pools.filter(p => p.clientId === s.activeClient).reduce((m, p) => Math.max(m, p.order), -1)
-      s.pools.push({
-        id: nanoid(), clientId: s.activeClient, name,
-        order: maxOrder + 1, createdAt: new Date().toISOString(),
+    updateProject: (id, data) => {
+      set(s => {
+        const p = s.projects.find(p => p.id === id)
+        if (p) Object.assign(p, data)
       })
-    }),
-    updatePool: (id, name) => set(s => {
-      const p = s.pools.find(p => p.id === id)
-      if (p) p.name = name
-    }),
-    deletePool: (id) => set(s => {
-      s.pools = s.pools.filter(p => p.id !== id)
-      s.tasks = s.tasks.filter(t => t.poolId !== id)
-    }),
+      const project = get().projects.find(p => p.id === id)
+      if (project) { markLocalWrite(); upsertProject(project).catch(console.error) }
+    },
+    deleteProject: (id) => {
+      set(s => {
+        s.projects = s.projects.filter(p => p.id !== id)
+        s.tasks.forEach(t => { if (t.projectId === id) delete t.projectId })
+      })
+      markLocalWrite()
+      dbDeleteProject(id).catch(console.error)
+      upsertTasks(get().tasks).catch(console.error)
+    },
+
+    addPool: (name) => {
+      const id = nanoid()
+      set(s => {
+        const maxOrder = s.pools.filter(p => p.clientId === s.activeClient).reduce((m, p) => Math.max(m, p.order), -1)
+        s.pools.push({ id, clientId: s.activeClient, name, order: maxOrder + 1, createdAt: new Date().toISOString() })
+      })
+      const pool = get().pools.find(p => p.id === id)!
+      markLocalWrite(); upsertPool(pool).catch(console.error)
+    },
+    updatePool: (id, name) => {
+      set(s => { const p = s.pools.find(p => p.id === id); if (p) p.name = name })
+      const pool = get().pools.find(p => p.id === id)
+      if (pool) { markLocalWrite(); upsertPool(pool).catch(console.error) }
+    },
+    deletePool: (id) => {
+      set(s => {
+        s.pools = s.pools.filter(p => p.id !== id)
+        s.tasks = s.tasks.filter(t => t.poolId !== id)
+      })
+      markLocalWrite(); dbDeletePool(id).catch(console.error)
+    },
     setEditingPool: (id) => set(s => { s.editingPoolId = id }),
     setAddingTaskToPool: (id) => set(s => { s.addingTaskToPoolId = id }),
 
-    addTask: (poolId, data) => set(s => {
-      const pool = s.pools.find(p => p.id === poolId)
-      if (!pool) return
-      const poolTasks = s.tasks.filter(t => t.poolId === poolId)
-      const maxOrder = poolTasks.reduce((m, t) => Math.max(m, t.order), -1)
-
-      // Placeholder dates — rescheduleAll will fix them
-      s.tasks.push({
-        ...data,
-        id: nanoid(),
-        poolId,
-        clientId: pool.clientId,
-        order: maxOrder + 1,
-        scheduledStart: new Date().toISOString(),
-        scheduledEnd: new Date().toISOString(),
-        status: data.status ?? 'pending',
+    addTask: (poolId, data) => {
+      set(s => {
+        const pool = s.pools.find(p => p.id === poolId)
+        if (!pool) return
+        const maxOrder = s.tasks.filter(t => t.poolId === poolId).reduce((m, t) => Math.max(m, t.order), -1)
+        s.tasks.push({
+          ...data,
+          id: nanoid(),
+          poolId,
+          clientId: pool.clientId,
+          order: maxOrder + 1,
+          scheduledStart: new Date().toISOString(),
+          scheduledEnd: new Date().toISOString(),
+          status: data.status ?? 'pending',
+        })
+        rescheduleAll(s.tasks, s.pools, s.clients)
       })
-      rescheduleAll(s.tasks, s.pools, s.clients)
-    }),
+      markLocalWrite(); upsertTasks(get().tasks).catch(console.error)
+    },
 
-    updateTask: (id, data) => set(s => {
-      const task = s.tasks.find(t => t.id === id)
-      if (!task) return
-      Object.assign(task, data)
-      rescheduleAll(s.tasks, s.pools, s.clients)
-    }),
+    updateTask: (id, data) => {
+      set(s => {
+        const task = s.tasks.find(t => t.id === id)
+        if (!task) return
+        Object.assign(task, data)
+        rescheduleAll(s.tasks, s.pools, s.clients)
+      })
+      markLocalWrite(); upsertTasks(get().tasks).catch(console.error)
+    },
 
-    deleteTask: (id) => set(s => {
-      s.tasks = s.tasks.filter(t => t.id !== id)
-      // Remove referências a esta tarefa nas predecessoras
-      s.tasks.forEach(t => {
-        if (t.predecessors?.includes(id)) {
-          t.predecessors = t.predecessors.filter(p => p !== id)
+    deleteTask: (id) => {
+      set(s => {
+        s.tasks = s.tasks.filter(t => t.id !== id)
+        s.tasks.forEach(t => {
+          if (t.predecessors?.includes(id)) t.predecessors = t.predecessors.filter(p => p !== id)
+        })
+        const pools = new Set(s.tasks.map(t => t.poolId))
+        for (const pid of pools) {
+          s.tasks.filter(t => t.poolId === pid).sort((a, b) => a.order - b.order).forEach((t, i) => { t.order = i })
         }
+        rescheduleAll(s.tasks, s.pools, s.clients)
       })
-      // Re-indexa orders por pool
-      const pools = new Set(s.tasks.map(t => t.poolId))
-      for (const poolId of pools) {
-        s.tasks.filter(t => t.poolId === poolId).sort((a, b) => a.order - b.order)
-          .forEach((t, i) => { t.order = i })
-      }
-      rescheduleAll(s.tasks, s.pools, s.clients)
-    }),
+      markLocalWrite()
+      dbDeleteTask(id).catch(console.error)
+      upsertTasks(get().tasks).catch(console.error)
+    },
 
     moveTask: (taskId, toPoolId, toIndex) => set(s => {
       const task = s.tasks.find(t => t.id === taskId)
       if (!task) return
       const targetPool = s.pools.find(p => p.id === toPoolId)
       if (!targetPool) return
-
-      const sourceTasks = s.tasks
-        .filter(t => t.poolId === task.poolId && t.id !== taskId)
-        .sort((a, b) => a.order - b.order)
-      sourceTasks.forEach((t, i) => { t.order = i })
-
-      const targetTasks = s.tasks
-        .filter(t => t.poolId === toPoolId && t.id !== taskId)
+      s.tasks.filter(t => t.poolId === task.poolId && t.id !== taskId)
+        .sort((a, b) => a.order - b.order).forEach((t, i) => { t.order = i })
+      const targetTasks = s.tasks.filter(t => t.poolId === toPoolId && t.id !== taskId)
         .sort((a, b) => a.order - b.order)
       targetTasks.splice(toIndex, 0, task)
       targetTasks.forEach((t, i) => { t.order = i })
-
       task.poolId = toPoolId
       task.clientId = targetPool.clientId
-
       rescheduleAll(s.tasks, s.pools, s.clients)
+      markLocalWrite(); upsertTasks(s.tasks).catch(console.error)
     }),
 
     setEditingTask: (id) => set(s => { s.editingTaskId = id }),
 
-    markDelayed: (taskId, actualEnd) => set(s => {
-      const task = s.tasks.find(t => t.id === taskId)
-      if (!task) return
-      task.status = 'delayed'
-      if (!task.delayedSince) task.delayedSince = new Date().toISOString()
-      if (actualEnd) task.actualEnd = actualEnd.toISOString()
-      rescheduleAll(s.tasks, s.pools, s.clients)
-    }),
+    markDelayed: (taskId, actualEnd) => {
+      set(s => {
+        const task = s.tasks.find(t => t.id === taskId)
+        if (!task) return
+        task.status = 'delayed'
+        if (!task.delayedSince) task.delayedSince = new Date().toISOString()
+        if (actualEnd) task.actualEnd = actualEnd.toISOString()
+        rescheduleAll(s.tasks, s.pools, s.clients)
+      })
+      markLocalWrite(); upsertTasks(get().tasks).catch(console.error)
+    },
 
-    markCompleted: (taskId) => set(s => {
-      const task = s.tasks.find(t => t.id === taskId)
-      if (task) {
-        task.status = 'completed'
-        task.actualEnd = task.actualEnd ?? new Date().toISOString()
-      }
-      rescheduleAll(s.tasks, s.pools, s.clients)
-    }),
+    markCompleted: (taskId) => {
+      set(s => {
+        const task = s.tasks.find(t => t.id === taskId)
+        if (task) { task.status = 'completed'; task.actualEnd = task.actualEnd ?? new Date().toISOString() }
+        rescheduleAll(s.tasks, s.pools, s.clients)
+      })
+      markLocalWrite(); upsertTasks(get().tasks).catch(console.error)
+    },
 
-    markInProgress: (taskId) => set(s => {
-      const task = s.tasks.find(t => t.id === taskId)
-      if (task) task.status = 'in_progress'
-    }),
+    markInProgress: (taskId) => {
+      set(s => { const task = s.tasks.find(t => t.id === taskId); if (task) task.status = 'in_progress' })
+      markLocalWrite(); upsertTasks(get().tasks).catch(console.error)
+    },
 
-    checkAndPropagateDelays: () => set(s => {
+    checkAndPropagateDelays: () => {
       const now = new Date()
       let changed = false
-      for (const task of s.tasks) {
-        if (task.status === 'in_progress' && isAfter(now, parseISO(task.scheduledEnd))) {
-          if (!task.delayedSince) {
-            task.status = 'delayed'
-            task.delayedSince = now.toISOString()
-            changed = true
+      set(s => {
+        for (const task of s.tasks) {
+          if (task.status === 'in_progress' && isAfter(now, parseISO(task.scheduledEnd))) {
+            if (!task.delayedSince) { task.status = 'delayed'; task.delayedSince = now.toISOString(); changed = true }
           }
         }
-      }
-      if (changed) rescheduleAll(s.tasks, s.pools, s.clients)
-    }),
+        if (changed) rescheduleAll(s.tasks, s.pools, s.clients)
+      })
+      if (changed) { markLocalWrite(); upsertTasks(get().tasks).catch(console.error) }
+    },
   }))
 )
-
-useStore.subscribe((state) => {
-  saveState({
-    activeClient: state.activeClient,
-    clients: state.clients,
-    view: state.view,
-    viewportStart: state.viewportStart,
-    pools: state.pools,
-    tasks: state.tasks,
-    projects: state.projects,
-  })
-})
