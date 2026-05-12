@@ -3,19 +3,21 @@ import { ptBR } from 'date-fns/locale'
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { useStore } from '../../store'
 import { useShallow } from 'zustand/react/shallow'
-import { CLIENT_CONFIGS } from '../../config/clients'
 
 export function TopBar() {
-  const { view, viewportStart, activeClient, setView, navigateViewport, addPool } = useStore(useShallow(s => ({
+  const { view, viewportStart, activeClient, clients, setView, navigateViewport, addPool } = useStore(useShallow(s => ({
     view: s.view,
     viewportStart: s.viewportStart,
     activeClient: s.activeClient,
+    clients: s.clients,
     setView: s.setView,
     navigateViewport: s.navigateViewport,
     addPool: s.addPool,
   })))
 
-  const client = CLIENT_CONFIGS[activeClient]
+  const client = clients.find(c => c.id === activeClient)
+  if (!client) return null
+
   const date = parseISO(viewportStart)
 
   const dateLabel = view === 'daily'
@@ -76,7 +78,6 @@ export function TopBar() {
         Hoje
       </button>
 
-      {/* Spacer */}
       <div className="flex-1" />
 
       {/* Add pool */}
@@ -85,7 +86,7 @@ export function TopBar() {
           const name = prompt(`Nome do ${client.poolLabel}:`)
           if (name?.trim()) addPool(name.trim())
         }}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white rounded-lg transition-colors"
+        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white rounded-lg transition-colors hover:opacity-90"
         style={{ backgroundColor: client.color }}
       >
         <Plus size={14} />

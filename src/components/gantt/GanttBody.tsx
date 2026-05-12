@@ -11,12 +11,11 @@ import {
 } from '@dnd-kit/core'
 import { useStore } from '../../store'
 import { GanttRow } from './GanttRow'
-import { CLIENT_CONFIGS } from '../../config/clients'
 
 export function GanttBody() {
-  // Select raw values — no computed arrays inside the selector
   const activeClient = useStore(s => s.activeClient)
   const allPools = useStore(s => s.pools)
+  const allClients = useStore(s => s.clients)
   const moveTask = useStore(s => s.moveTask)
   const checkAndPropagateDelays = useStore(s => s.checkAndPropagateDelays)
 
@@ -66,15 +65,15 @@ export function GanttBody() {
     moveTask(activeId, targetPoolId, targetIndex)
   }
 
-  const client = CLIENT_CONFIGS[activeClient]
+  const client = allClients.find(c => c.id === activeClient)
 
   if (pools.length === 0) {
     return (
       <div className="flex items-center justify-center" style={{ height: 300 }}>
         <div className="text-center">
           <div className="text-4xl mb-3">📋</div>
-          <p className="text-sm font-medium text-gray-500">Nenhum {client.poolLabel.toLowerCase()} cadastrado</p>
-          <p className="text-xs text-gray-400 mt-1">Clique em "+ {client.poolLabel}" no topo para começar</p>
+          <p className="text-sm font-medium text-gray-500">Nenhum {client?.poolLabel.toLowerCase() ?? 'item'} cadastrado</p>
+          <p className="text-xs text-gray-400 mt-1">Clique em "+ {client?.poolLabel ?? 'Item'}" no topo para começar</p>
         </div>
       </div>
     )

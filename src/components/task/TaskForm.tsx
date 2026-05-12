@@ -7,7 +7,6 @@ import { Select } from '../ui/Select'
 import { Textarea } from '../ui/Textarea'
 import { useStore } from '../../store'
 import { useShallow } from 'zustand/react/shallow'
-import { CLIENT_CONFIGS } from '../../config/clients'
 import type { Task } from '../../types/task'
 
 type FormData = {
@@ -73,11 +72,12 @@ function Toggle({
 }
 
 export function TaskForm() {
-  const { editingTaskId, addingTaskToPoolId, tasks, activeClient, addTask, updateTask, setEditingTask, setAddingTaskToPool } = useStore(useShallow(s => ({
+  const { editingTaskId, addingTaskToPoolId, tasks, activeClient, clients, addTask, updateTask, setEditingTask, setAddingTaskToPool } = useStore(useShallow(s => ({
     editingTaskId: s.editingTaskId,
     addingTaskToPoolId: s.addingTaskToPoolId,
     tasks: s.tasks,
     activeClient: s.activeClient,
+    clients: s.clients,
     addTask: s.addTask,
     updateTask: s.updateTask,
     setEditingTask: s.setEditingTask,
@@ -88,8 +88,8 @@ export function TaskForm() {
   const task = editingTaskId ? tasks.find(t => t.id === editingTaskId) : null
   const poolId = isEditing ? task?.poolId : addingTaskToPoolId
   const taskClientId = isEditing ? (task?.clientId ?? activeClient) : activeClient
-  const client = CLIENT_CONFIGS[taskClientId]
-  const cal = client.workCalendar
+  const client = clients.find(c => c.id === taskClientId)!
+  const cal = client?.workCalendar
 
   const [form, setForm] = useState<FormData>({
     title: task?.title ?? '',
@@ -98,7 +98,7 @@ export function TaskForm() {
     status: task?.status ?? 'pending',
     overtime: task?.overtime ?? false,
     lunchWork: task?.lunchWork ?? false,
-    ...client.taskExtraFields.reduce((acc, f) => ({
+    ...(client?.taskExtraFields ?? []).reduce((acc, f) => ({
       ...acc,
       [f.key]: String((task as unknown as Record<string, unknown>)?.[f.key] ?? ''),
     }), {}),
@@ -115,7 +115,7 @@ export function TaskForm() {
     if (!form.title.trim()) errs.title = 'Título obrigatório'
     const dur = parseFloat(form.durationHours as string)
     if (!form.durationHours || isNaN(dur) || dur <= 0) errs.durationHours = 'Duração deve ser > 0'
-    client.taskExtraFields.forEach(f => {
+    ;(client?.taskExtraFields ?? []).forEach(f => {
       if (f.required && !(form[f.key] as string)?.trim()) errs[f.key] = `${f.label} obrigatório`
     })
     setErrors(errs)
@@ -126,7 +126,7 @@ export function TaskForm() {
     e.preventDefault()
     if (!validate()) return
 
-    const extraData = client.taskExtraFields.reduce((acc, f) => {
+    const extraData = (client?.taskExtraFields ?? []).reduce((acc, f) => {
       const val = form[f.key] as string
       if (!val) return acc
       return { ...acc, [f.key]: f.type === 'number' ? parseFloat(val) : val }
@@ -158,7 +158,7 @@ export function TaskForm() {
 
   return (
     <Modal
-      title={isEditing ? `Editar ${client.taskLabel}` : `Nova ${client.taskLabel}`}
+      title={isEditing ? `Editar ${client?.taskLabel ?? 'tarefa'}` : `Nova ${client?.taskLabel ?? 'tarefa'}`}
       onClose={onClose}
       size="lg"
     >
@@ -170,7 +170,7 @@ export function TaskForm() {
           error={errors.title}
           required
           autoFocus
-          placeholder={`Nome da ${client.taskLabel.toLowerCase()}`}
+          placeholder={`Nome da ${client?.taskLabel.toLowerCase() ?? 'tarefa'}`}
         />
 
         <Input
@@ -186,7 +186,7 @@ export function TaskForm() {
         />
 
         {/* Campos extras do cliente */}
-        {client.taskExtraFields.map(field => (
+        {(client?.taskExtraFields ?? []).map(field => (
           field.type === 'select' ? (
             <Select
               key={field.key}
@@ -215,7 +215,7 @@ export function TaskForm() {
         <div>
           <div className="text-xs font-medium text-gray-500 mb-2">Regime de trabalho</div>
           <div className="space-y-2">
-            {cal.overtimeHours && (
+            {cal?.overtimeHours && (
               <Toggle
                 checked={form.overtime as boolean}
                 onChange={v => setField('overtime', v)}
@@ -225,13 +225,13 @@ export function TaskForm() {
                 color="#f59e0b"
               />
             )}
-            {cal.lunchStart !== undefined && cal.lunchEnd !== undefined && (
+            {cal?.lunchStart !== undefined && cal?.lunchEnd !== undefined && (
               <Toggle
                 checked={form.lunchWork as boolean}
                 onChange={v => setField('lunchWork', v)}
                 icon={<Coffee size={15} />}
                 label="Trabalha no almoço"
-                description={`Aproveita o intervalo de ${cal.lunchStart}h às ${cal.lunchEnd}h`}
+                description={`Aproveita o intervalo de ${cal?.lunchStart}h às ${cal?.lunchEnd}h`}
                 color="#10b981"
               />
             )}

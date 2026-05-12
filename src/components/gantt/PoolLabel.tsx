@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { Edit2, Trash2, Plus, ChevronDown, ChevronRight } from 'lucide-react'
 import { useStore } from '../../store'
 import { useShallow } from 'zustand/react/shallow'
-import { CLIENT_CONFIGS } from '../../config/clients'
 import { LABEL_WIDTH } from '../../config/constants'
 import type { Pool } from '../../types/pool'
 
@@ -15,13 +14,14 @@ interface Props {
 export function PoolLabel({ pool, collapsed, onToggleCollapse }: Props) {
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(pool.name)
-  const { updatePool, deletePool, setAddingTaskToPool, activeClient } = useStore(useShallow(s => ({
+  const { updatePool, deletePool, setAddingTaskToPool, activeClient, clients } = useStore(useShallow(s => ({
     updatePool: s.updatePool,
     deletePool: s.deletePool,
     setAddingTaskToPool: s.setAddingTaskToPool,
     activeClient: s.activeClient,
+    clients: s.clients,
   })))
-  const client = CLIENT_CONFIGS[activeClient]
+  const client = clients.find(c => c.id === activeClient)
 
   const saveEdit = () => {
     if (name.trim()) updatePool(pool.id, name.trim())
@@ -54,7 +54,7 @@ export function PoolLabel({ pool, collapsed, onToggleCollapse }: Props) {
         <button
           onClick={() => setAddingTaskToPool(pool.id)}
           className="p-1 text-gray-400 hover:text-blue-600 rounded transition-colors"
-          title={`Adicionar ${client.taskLabel}`}
+          title={`Adicionar ${client?.taskLabel ?? 'item'}`}
         >
           <Plus size={13} />
         </button>
@@ -67,7 +67,7 @@ export function PoolLabel({ pool, collapsed, onToggleCollapse }: Props) {
         </button>
         <button
           onClick={() => {
-            if (confirm(`Deletar ${client.poolLabel.toLowerCase()} "${pool.name}"?`)) deletePool(pool.id)
+            if (confirm(`Deletar ${client?.poolLabel.toLowerCase() ?? 'item'} "${pool.name}"?`)) deletePool(pool.id)
           }}
           className="p-1 text-gray-400 hover:text-red-500 rounded transition-colors"
           title="Deletar"

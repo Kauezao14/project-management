@@ -1,25 +1,27 @@
 import { useStore } from '../../store'
 import { useShallow } from 'zustand/react/shallow'
-import { CLIENT_CONFIGS } from '../../config/clients'
 import { Plus, Settings } from 'lucide-react'
 
 export function Sidebar() {
-  const { activeClient, pools, setClient, addPool, setShowClientSelector } = useStore(useShallow(s => ({
+  const { activeClient, clients, setClient, addPool, setShowClientSelector } = useStore(useShallow(s => ({
     activeClient: s.activeClient,
-    pools: s.pools,
+    clients: s.clients,
     setClient: s.setClient,
     addPool: s.addPool,
     setShowClientSelector: s.setShowClientSelector,
   })))
 
-  const client = CLIENT_CONFIGS[activeClient]
-  const clientPools = pools.filter(p => p.clientId === activeClient).sort((a, b) => a.order - b.order)
+  const allPools = useStore(s => s.pools)
+  const client = clients.find(c => c.id === activeClient)
+  const clientPools = allPools.filter(p => p.clientId === activeClient).sort((a, b) => a.order - b.order)
+
+  if (!client) return null
 
   return (
     <aside className="w-56 bg-gray-900 text-white flex flex-col h-full shrink-0">
       {/* Header */}
       <div className="px-4 py-4 border-b border-gray-800">
-        <div className="text-xs text-gray-500 uppercase tracking-wider mb-2">Cliente Ativo</div>
+        <div className="text-xs text-gray-500 uppercase tracking-wider mb-2">Empresa Ativa</div>
         <button
           onClick={() => setShowClientSelector(true)}
           className="flex items-center gap-2 w-full hover:bg-gray-800 rounded-lg px-2 py-2 transition-colors"
@@ -28,7 +30,7 @@ export function Sidebar() {
             className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
             style={{ backgroundColor: client.color }}
           >
-            {client.name[0]}
+            {client.name[0].toUpperCase()}
           </div>
           <div className="text-left">
             <div className="text-sm font-semibold text-white">{client.name}</div>
@@ -67,25 +69,27 @@ export function Sidebar() {
       </div>
 
       {/* Client switcher */}
-      <div className="px-4 py-3 border-t border-gray-800">
-        <div className="text-xs text-gray-600 mb-2">Trocar cliente</div>
-        <div className="flex gap-2">
-          {Object.values(CLIENT_CONFIGS).map(c => (
-            <button
-              key={c.id}
-              onClick={() => setClient(c.id)}
-              className={`flex-1 text-xs py-1.5 rounded-md font-medium transition-colors ${
-                c.id === activeClient
-                  ? 'text-white'
-                  : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'
-              }`}
-              style={c.id === activeClient ? { backgroundColor: c.color } : {}}
-            >
-              {c.name}
-            </button>
-          ))}
+      {clients.length > 1 && (
+        <div className="px-4 py-3 border-t border-gray-800">
+          <div className="text-xs text-gray-600 mb-2">Trocar empresa</div>
+          <div className="flex flex-col gap-1">
+            {clients.map(c => (
+              <button
+                key={c.id}
+                onClick={() => setClient(c.id)}
+                className={`text-xs py-1.5 px-2 rounded-md font-medium transition-colors text-left ${
+                  c.id === activeClient
+                    ? 'text-white'
+                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'
+                }`}
+                style={c.id === activeClient ? { backgroundColor: c.color } : {}}
+              >
+                {c.name}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </aside>
   )
 }
