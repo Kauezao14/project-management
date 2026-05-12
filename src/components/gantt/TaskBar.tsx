@@ -235,7 +235,10 @@ export function TaskBar({ task, left, width }: Props) {
             </div>
             <div className="flex items-center gap-1 pt-0.5">
               <Clock size={10} />
-              {task.durationHours}h — início: {format(parseISO(task.scheduledStart), "dd/MM HH:mm", { locale: ptBR })}
+              {task.durationHours}h &nbsp;·&nbsp;
+              {format(parseISO(task.scheduledStart), "dd/MM HH:mm", { locale: ptBR })}
+              {' → '}
+              {format(parseISO(task.scheduledEnd), "dd/MM HH:mm", { locale: ptBR })}
             </div>
             {task.notes && (
               <div className="text-gray-400 pt-1 border-t border-gray-700">{task.notes}</div>
