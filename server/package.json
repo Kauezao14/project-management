@@ -1,0 +1,13 @@
+{
+  "name": "gantt-local-server",
+  "version": "1.0.0",
+  "description": "Servidor local para acesso via rede interna (sem internet)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.0",
+    "http-proxy-middleware": "^3.0.0"
+  }
+}
