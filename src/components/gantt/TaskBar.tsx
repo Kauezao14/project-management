@@ -3,7 +3,7 @@ import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { CheckCircle, PlayCircle, AlertTriangle, Clock, Trash2, Edit2 } from 'lucide-react'
+import { CheckCircle, PlayCircle, AlertTriangle, Clock, Trash2, Edit2, Moon, Coffee } from 'lucide-react'
 import { useStore } from '../../store'
 import { useShallow } from 'zustand/react/shallow'
 import type { Task } from '../../types/task'
@@ -112,12 +112,24 @@ export function TaskBar({ task, left, width }: Props) {
           </span>
         )}
 
-        {/* Badge "Atrasado" */}
-        {task.status === 'delayed' && minWidth && (
-          <span className="ml-auto shrink-0 text-xs font-bold text-white/90 bg-red-600/70 px-1 rounded">
-            Atrasado
-          </span>
-        )}
+        {/* Badges de regime */}
+        <div className="ml-auto flex items-center gap-0.5 shrink-0">
+          {task.lunchWork && (
+            <span title="Trabalha no almoço" className="text-white/90">
+              <Coffee size={10} />
+            </span>
+          )}
+          {task.overtime && (
+            <span title="Hora extra" className="text-white/90">
+              <Moon size={10} />
+            </span>
+          )}
+          {task.status === 'delayed' && minWidth && (
+            <span className="text-xs font-bold text-white/90 bg-red-600/70 px-1 rounded ml-1">
+              Atrasado
+            </span>
+          )}
+        </div>
 
         {/* Risco diagonal para concluído */}
         {task.status === 'completed' && (

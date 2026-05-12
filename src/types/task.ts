@@ -19,6 +19,9 @@ export interface Task {
   // DOMINUS
   moldRef?: string
   quantity?: number
+  // Scheduling modifiers
+  overtime?: boolean    // trabalha horas extras após o fim do expediente
+  lunchWork?: boolean   // trabalha no intervalo de almoço
   // Delay tracking
   delayedSince?: string
   actualEnd?: string

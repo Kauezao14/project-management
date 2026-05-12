@@ -6,7 +6,7 @@ import {
   parseISO, isAfter
 } from 'date-fns'
 import { CLIENT_CONFIGS } from '../config/clients'
-import { addWorkHours, snapToWorkStart } from '../lib/workCalendar'
+import { addWorkHours, snapToWorkStart, getEffectiveCalendar } from '../lib/workCalendar'
 import { saveState, loadState } from '../lib/persistence'
 import { getViewportStart } from '../lib/ganttLayout'
 import type { ClientId } from '../types/client'
@@ -70,9 +70,10 @@ function _recalculatePool(tasks: Task[], poolId: string, clientId: ClientId) {
 
   for (const task of poolTasks) {
     const t = tasks.find(t => t.id === task.id)!
+    const effectiveCal = getEffectiveCalendar(cal, t)
     t.scheduledStart = cursor.toISOString()
-    t.scheduledEnd = addWorkHours(cursor, t.durationHours, cal).toISOString()
-    cursor = parseISO(t.scheduledEnd)
+    t.scheduledEnd = addWorkHours(cursor, t.durationHours, effectiveCal).toISOString()
+    cursor = snapToWorkStart(parseISO(t.scheduledEnd), cal) // próxima tarefa usa cal base
   }
 }
 

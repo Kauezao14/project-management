@@ -11,7 +11,10 @@ export interface FieldDef {
 export interface WorkCalendar {
   startHour: number
   endHour: number
-  workDays: number[] // 0=Dom, 1=Seg...6=Sab
+  workDays: number[]    // 0=Dom, 1=Seg...6=Sab
+  lunchStart?: number   // ex: 12
+  lunchEnd?: number     // ex: 13
+  overtimeHours?: number // horas extras disponíveis após endHour (ex: 2)
 }
 
 export interface ClientConfig {

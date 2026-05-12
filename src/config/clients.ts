@@ -13,6 +13,9 @@ export const CLIENT_CONFIGS: Record<string, ClientConfig> = {
       startHour: 7,
       endHour: 17,
       workDays: [1, 2, 3, 4, 5],
+      lunchStart: 12,
+      lunchEnd: 13,
+      overtimeHours: 2,
     },
     taskExtraFields: [
       {
@@ -45,6 +48,9 @@ export const CLIENT_CONFIGS: Record<string, ClientConfig> = {
       startHour: 7,
       endHour: 17,
       workDays: [1, 2, 3, 4, 5],
+      lunchStart: 12,
+      lunchEnd: 13,
+      overtimeHours: 2,
     },
     taskExtraFields: [
       {
