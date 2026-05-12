@@ -12,17 +12,30 @@ const COLOR_PALETTE = [
 
 const DAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 
+// Converts decimal hour (7.75) to "HH:MM" ("07:45")
+function toTimeStr(h: number): string {
+  const hours = Math.floor(h)
+  const mins = Math.round((h - hours) * 60)
+  return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`
+}
+
+// Converts "HH:MM" to decimal hour (7.75)
+function fromTimeStr(t: string): number {
+  const [h, m] = t.split(':').map(Number)
+  return h + (m || 0) / 60
+}
+
 type FormState = {
   name: string
   poolLabel: string
-  poolLabelPlural: string
   taskLabel: string
-  taskLabelPlural: string
   color: string
-  startHour: string
-  endHour: string
-  lunchStart: string
-  lunchEnd: string
+  startTime: string   // "HH:MM"
+  endTime: string     // "HH:MM"
+  hasLunch: boolean
+  lunchStartTime: string  // "HH:MM"
+  lunchEndTime: string    // "HH:MM"
+  hasOvertime: boolean
   overtimeHours: string
   workDays: number[]
 }
@@ -30,16 +43,43 @@ type FormState = {
 const DEFAULT_FORM: FormState = {
   name: '',
   poolLabel: '',
-  poolLabelPlural: '',
   taskLabel: '',
-  taskLabelPlural: '',
   color: COLOR_PALETTE[0],
-  startHour: '7',
-  endHour: '17',
-  lunchStart: '12',
-  lunchEnd: '13',
-  overtimeHours: '',
+  startTime: '07:00',
+  endTime: '17:00',
+  hasLunch: true,
+  lunchStartTime: '12:00',
+  lunchEndTime: '13:00',
+  hasOvertime: false,
+  overtimeHours: '2',
   workDays: [1, 2, 3, 4, 5],
+}
+
+function TimeInput({
+  label,
+  value,
+  onChange,
+  error,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  error?: string
+}) {
+  return (
+    <div>
+      <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
+      <input
+        type="time"
+        className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+          error ? 'border-red-400' : 'border-gray-200'
+        }`}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+      />
+      {error && <p className="text-xs text-red-500 mt-0.5">{error}</p>}
+    </div>
+  )
 }
 
 function CompanyForm({
@@ -56,7 +96,7 @@ function CompanyForm({
   const [form, setForm] = useState<FormState>(initial)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
-  const set = (k: keyof FormState, v: string | number[]) =>
+  const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setForm(prev => ({ ...prev, [k]: v }))
 
   const toggleDay = (d: number) => {
@@ -72,12 +112,12 @@ function CompanyForm({
     const e: Record<string, string> = {}
     if (!form.name.trim()) e.name = 'Obrigatório'
     if (!form.poolLabel.trim()) e.poolLabel = 'Obrigatório'
-    if (!form.poolLabelPlural.trim()) e.poolLabelPlural = 'Obrigatório'
     if (!form.taskLabel.trim()) e.taskLabel = 'Obrigatório'
-    if (!form.taskLabelPlural.trim()) e.taskLabelPlural = 'Obrigatório'
-    const s = parseInt(form.startHour), e2 = parseInt(form.endHour)
-    if (isNaN(s) || s < 0 || s > 23) e.startHour = 'Inválido'
-    if (isNaN(e2) || e2 <= s) e.endHour = 'Deve ser > início'
+    if (!form.startTime) e.startTime = 'Obrigatório'
+    if (!form.endTime) e.endTime = 'Obrigatório'
+    if (form.startTime && form.endTime && fromTimeStr(form.endTime) <= fromTimeStr(form.startTime)) {
+      e.endTime = 'Deve ser após o início'
+    }
     if (form.workDays.length === 0) e.workDays = 'Selecione ao menos 1 dia'
     setErrors(e)
     return Object.keys(e).length === 0
@@ -87,23 +127,8 @@ function CompanyForm({
     if (validate()) onSave(form)
   }
 
-  const field = (label: string, key: keyof FormState, placeholder: string, errKey?: string) => (
-    <div>
-      <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
-      <input
-        className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-          errors[errKey ?? key] ? 'border-red-400' : 'border-gray-200'
-        }`}
-        value={form[key] as string}
-        onChange={e => set(key, e.target.value)}
-        placeholder={placeholder}
-      />
-      {errors[errKey ?? key] && <p className="text-xs text-red-500 mt-0.5">{errors[errKey ?? key]}</p>}
-    </div>
-  )
-
   return (
-    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6">
+    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
       <div className="flex items-center justify-between mb-5">
         <h2 className="text-lg font-bold text-gray-800">{title}</h2>
         <button onClick={onCancel} className="text-gray-400 hover:text-gray-600">
@@ -111,16 +136,42 @@ function CompanyForm({
         </button>
       </div>
 
-      <div className="space-y-3">
-        {field('Nome da empresa', 'name', 'Ex: PSG, Dominus...')}
-
-        <div className="grid grid-cols-2 gap-3">
-          {field('Fila (singular)', 'poolLabel', 'Ex: Técnico')}
-          {field('Fila (plural)', 'poolLabelPlural', 'Ex: Técnicos')}
+      <div className="space-y-4">
+        {/* Name */}
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Nome da empresa</label>
+          <input
+            autoFocus
+            className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.name ? 'border-red-400' : 'border-gray-200'}`}
+            value={form.name}
+            onChange={e => set('name', e.target.value)}
+            placeholder="Ex: Dominus, PSG, Acme..."
+          />
+          {errors.name && <p className="text-xs text-red-500 mt-0.5">{errors.name}</p>}
         </div>
+
+        {/* Labels */}
         <div className="grid grid-cols-2 gap-3">
-          {field('Tarefa (singular)', 'taskLabel', 'Ex: Trabalho')}
-          {field('Tarefa (plural)', 'taskLabelPlural', 'Ex: Trabalhos')}
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Nome da fila</label>
+            <input
+              className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.poolLabel ? 'border-red-400' : 'border-gray-200'}`}
+              value={form.poolLabel}
+              onChange={e => set('poolLabel', e.target.value)}
+              placeholder="Ex: Máquina, Técnico"
+            />
+            {errors.poolLabel && <p className="text-xs text-red-500 mt-0.5">{errors.poolLabel}</p>}
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Nome da tarefa</label>
+            <input
+              className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.taskLabel ? 'border-red-400' : 'border-gray-200'}`}
+              value={form.taskLabel}
+              onChange={e => set('taskLabel', e.target.value)}
+              placeholder="Ex: Atividade, Peça"
+            />
+            {errors.taskLabel && <p className="text-xs text-red-500 mt-0.5">{errors.taskLabel}</p>}
+          </div>
         </div>
 
         {/* Color */}
@@ -133,10 +184,7 @@ function CompanyForm({
                 type="button"
                 onClick={() => set('color', c)}
                 className="w-7 h-7 rounded-full border-2 flex items-center justify-center transition-transform hover:scale-110"
-                style={{
-                  backgroundColor: c,
-                  borderColor: form.color === c ? '#1e3a5f' : 'transparent',
-                }}
+                style={{ backgroundColor: c, borderColor: form.color === c ? '#1e3a5f' : 'transparent' }}
               >
                 {form.color === c && <Check size={12} className="text-white" strokeWidth={3} />}
               </button>
@@ -154,9 +202,7 @@ function CompanyForm({
                 type="button"
                 onClick={() => toggleDay(idx)}
                 className={`flex-1 text-xs py-1.5 rounded-md font-medium transition-colors ${
-                  form.workDays.includes(idx)
-                    ? 'text-white'
-                    : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                  form.workDays.includes(idx) ? 'text-white' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
                 }`}
                 style={form.workDays.includes(idx) ? { backgroundColor: form.color } : {}}
               >
@@ -167,58 +213,72 @@ function CompanyForm({
           {errors.workDays && <p className="text-xs text-red-500 mt-0.5">{errors.workDays}</p>}
         </div>
 
-        {/* Hours */}
+        {/* Work hours */}
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Início expediente (h)</label>
-            <input
-              type="number" min="0" max="23"
-              className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.startHour ? 'border-red-400' : 'border-gray-200'}`}
-              value={form.startHour}
-              onChange={e => set('startHour', e.target.value)}
-            />
-            {errors.startHour && <p className="text-xs text-red-500 mt-0.5">{errors.startHour}</p>}
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Fim expediente (h)</label>
-            <input
-              type="number" min="1" max="24"
-              className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.endHour ? 'border-red-400' : 'border-gray-200'}`}
-              value={form.endHour}
-              onChange={e => set('endHour', e.target.value)}
-            />
-            {errors.endHour && <p className="text-xs text-red-500 mt-0.5">{errors.endHour}</p>}
-          </div>
+          <TimeInput
+            label="Início do expediente"
+            value={form.startTime}
+            onChange={v => set('startTime', v)}
+            error={errors.startTime}
+          />
+          <TimeInput
+            label="Fim do expediente"
+            value={form.endTime}
+            onChange={v => set('endTime', v)}
+            error={errors.endTime}
+          />
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Almoço início (h)</label>
+        {/* Lunch break */}
+        <div className="border border-gray-100 rounded-xl p-3 space-y-2">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
             <input
-              type="number" min="0" max="23" placeholder="—"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={form.lunchStart}
-              onChange={e => set('lunchStart', e.target.value)}
+              type="checkbox"
+              checked={form.hasLunch}
+              onChange={e => set('hasLunch', e.target.checked)}
+              className="rounded"
             />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Almoço fim (h)</label>
+            <span className="text-sm font-medium text-gray-700">Tem intervalo de almoço</span>
+          </label>
+          {form.hasLunch && (
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              <TimeInput
+                label="Início do almoço"
+                value={form.lunchStartTime}
+                onChange={v => set('lunchStartTime', v)}
+              />
+              <TimeInput
+                label="Fim do almoço"
+                value={form.lunchEndTime}
+                onChange={v => set('lunchEndTime', v)}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Overtime */}
+        <div className="border border-gray-100 rounded-xl p-3 space-y-2">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
             <input
-              type="number" min="0" max="24" placeholder="—"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={form.lunchEnd}
-              onChange={e => set('lunchEnd', e.target.value)}
+              type="checkbox"
+              checked={form.hasOvertime}
+              onChange={e => set('hasOvertime', e.target.checked)}
+              className="rounded"
             />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Hora extra (h)</label>
-            <input
-              type="number" min="0" max="8" placeholder="—"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={form.overtimeHours}
-              onChange={e => set('overtimeHours', e.target.value)}
-            />
-          </div>
+            <span className="text-sm font-medium text-gray-700">Permite hora extra</span>
+          </label>
+          {form.hasOvertime && (
+            <div className="pt-1">
+              <label className="block text-xs font-medium text-gray-600 mb-1">Horas extras disponíveis</label>
+              <input
+                type="number" min="0.5" max="8" step="0.5"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={form.overtimeHours}
+                onChange={e => set('overtimeHours', e.target.value)}
+                placeholder="Ex: 2"
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -244,41 +304,42 @@ function CompanyForm({
 }
 
 function formToConfig(form: FormState): Omit<ClientConfig, 'id' | 'createdAt' | 'taskExtraFields'> {
-  const ls = parseInt(form.lunchStart)
-  const le = parseInt(form.lunchEnd)
   const ot = parseFloat(form.overtimeHours)
+  const poolLabel = form.poolLabel.trim()
+  const taskLabel = form.taskLabel.trim()
   return {
     name: form.name.trim(),
-    poolLabel: form.poolLabel.trim(),
-    poolLabelPlural: form.poolLabelPlural.trim(),
-    taskLabel: form.taskLabel.trim(),
-    taskLabelPlural: form.taskLabelPlural.trim(),
+    poolLabel,
+    poolLabelPlural: poolLabel + 's',
+    taskLabel,
+    taskLabelPlural: taskLabel + 's',
     color: form.color,
     workCalendar: {
-      startHour: parseInt(form.startHour),
-      endHour: parseInt(form.endHour),
+      startHour: fromTimeStr(form.startTime),
+      endHour: fromTimeStr(form.endTime),
       workDays: form.workDays,
-      lunchStart: !isNaN(ls) && form.lunchStart !== '' ? ls : undefined,
-      lunchEnd: !isNaN(le) && form.lunchEnd !== '' ? le : undefined,
-      overtimeHours: !isNaN(ot) && form.overtimeHours !== '' ? ot : undefined,
+      lunchStart: form.hasLunch && form.lunchStartTime ? fromTimeStr(form.lunchStartTime) : undefined,
+      lunchEnd:   form.hasLunch && form.lunchEndTime   ? fromTimeStr(form.lunchEndTime)   : undefined,
+      overtimeHours: form.hasOvertime && !isNaN(ot) && form.overtimeHours !== '' ? ot : undefined,
     },
   }
 }
 
 function configToForm(c: ClientConfig): FormState {
+  const cal = c.workCalendar
   return {
     name: c.name,
     poolLabel: c.poolLabel,
-    poolLabelPlural: c.poolLabelPlural,
     taskLabel: c.taskLabel,
-    taskLabelPlural: c.taskLabelPlural,
     color: c.color,
-    startHour: String(c.workCalendar.startHour),
-    endHour: String(c.workCalendar.endHour),
-    lunchStart: c.workCalendar.lunchStart !== undefined ? String(c.workCalendar.lunchStart) : '',
-    lunchEnd: c.workCalendar.lunchEnd !== undefined ? String(c.workCalendar.lunchEnd) : '',
-    overtimeHours: c.workCalendar.overtimeHours !== undefined ? String(c.workCalendar.overtimeHours) : '',
-    workDays: c.workCalendar.workDays,
+    startTime: toTimeStr(cal.startHour),
+    endTime: toTimeStr(cal.endHour),
+    hasLunch: cal.lunchStart !== undefined,
+    lunchStartTime: cal.lunchStart !== undefined ? toTimeStr(cal.lunchStart) : '12:00',
+    lunchEndTime:   cal.lunchEnd   !== undefined ? toTimeStr(cal.lunchEnd)   : '13:00',
+    hasOvertime: cal.overtimeHours !== undefined,
+    overtimeHours: cal.overtimeHours !== undefined ? String(cal.overtimeHours) : '2',
+    workDays: cal.workDays,
   }
 }
 
@@ -365,9 +426,7 @@ export function ClientSelector() {
               <div
                 key={client.id}
                 className={`flex items-center gap-3 rounded-xl border-2 px-4 py-3 cursor-pointer transition-all ${
-                  activeClient === client.id
-                    ? 'border-current bg-opacity-5'
-                    : 'border-gray-100 hover:border-gray-200 bg-gray-50'
+                  activeClient === client.id ? 'border-current' : 'border-gray-100 hover:border-gray-200 bg-gray-50'
                 }`}
                 style={activeClient === client.id ? { borderColor: client.color, backgroundColor: `${client.color}10` } : {}}
                 onClick={() => handleSelect(client.id)}
@@ -381,7 +440,7 @@ export function ClientSelector() {
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-semibold text-gray-800">{client.name}</div>
                   <div className="text-xs text-gray-400">
-                    {client.poolLabelPlural} · {client.taskLabelPlural} · {client.workCalendar.startHour}h–{client.workCalendar.endHour}h
+                    {client.poolLabelPlural} · {client.taskLabelPlural} · {toTimeStr(client.workCalendar.startHour)}–{toTimeStr(client.workCalendar.endHour)}
                   </div>
                 </div>
                 {activeClient === client.id && (
