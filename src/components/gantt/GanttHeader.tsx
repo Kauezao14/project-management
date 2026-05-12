@@ -1,19 +1,19 @@
-import { parseISO, isToday } from 'date-fns'
+import { isToday } from 'date-fns'
 import { useStore } from '../../store'
-import { useShallow } from 'zustand/react/shallow'
-import { generateTimelineColumns, totalTimelinePx } from '../../lib/ganttLayout'
+import { generateMultiPeriodColumns, TIMELINE_PERIODS } from '../../lib/ganttLayout'
+import { useGanttTimeline } from '../../contexts/GanttTimelineContext'
 import { LABEL_WIDTH } from '../../config/constants'
 
 export function GanttHeader() {
-  const { view, viewportStart } = useStore(useShallow(s => ({ view: s.view, viewportStart: s.viewportStart })))
-  const vStart = parseISO(viewportStart)
-  const columns = generateTimelineColumns(view, vStart)
-  const total = totalTimelinePx(view, vStart)
+  const view = useStore(s => s.view)
+  const { anchor, totalWidth } = useGanttTimeline()
+  const { total: totalPeriods } = TIMELINE_PERIODS[view]
+  const columns = generateMultiPeriodColumns(view, anchor, totalPeriods)
 
   return (
     <div
       className="flex border-b border-gray-200 bg-gray-50 sticky top-0 z-20"
-      style={{ height: 36, minWidth: LABEL_WIDTH + total }}
+      style={{ height: 36, minWidth: LABEL_WIDTH + totalWidth }}
     >
       {/* Sticky label column */}
       <div
@@ -21,7 +21,7 @@ export function GanttHeader() {
         style={{ width: LABEL_WIDTH }}
       />
       {/* Timeline columns */}
-      <div className="flex" style={{ width: total }}>
+      <div className="flex" style={{ width: totalWidth }}>
         {columns.map(col => {
           const isCurrentDay = view !== 'daily' && isToday(col.date)
           return (

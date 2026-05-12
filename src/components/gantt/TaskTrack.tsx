@@ -1,33 +1,32 @@
 import { SortableContext, horizontalListSortingStrategy } from '@dnd-kit/sortable'
 import { useDroppable } from '@dnd-kit/core'
-import { parseISO, isToday } from 'date-fns'
+import { isToday } from 'date-fns'
 import { useStore } from '../../store'
 import { TaskBar } from './TaskBar'
-import { calcLeft, calcWidth, totalTimelinePx, generateTimelineColumns } from '../../lib/ganttLayout'
+import { calcLeft, calcWidth, generateMultiPeriodColumns, TIMELINE_PERIODS } from '../../lib/ganttLayout'
+import { useGanttTimeline } from '../../contexts/GanttTimelineContext'
 
 interface Props {
   poolId: string
 }
 
 export function TaskTrack({ poolId }: Props) {
-  // Select raw values — no computed arrays inside the selector
   const view = useStore(s => s.view)
-  const viewportStart = useStore(s => s.viewportStart)
   const allTasks = useStore(s => s.tasks)
+  const { anchor, totalWidth } = useGanttTimeline()
 
-  // Filter and sort outside the selector
   const tasks = allTasks
     .filter(t => t.poolId === poolId)
     .sort((a, b) => a.order - b.order)
 
   const { setNodeRef } = useDroppable({ id: `pool-drop-${poolId}`, data: { poolId } })
-  const vStart = parseISO(viewportStart)
-  const total = totalTimelinePx(view, vStart)
-  const columns = generateTimelineColumns(view, vStart)
+
+  const { total: totalPeriods } = TIMELINE_PERIODS[view]
+  const columns = generateMultiPeriodColumns(view, anchor, totalPeriods)
 
   const now = new Date()
-  const nowLeft = calcLeft(now.toISOString(), vStart, view)
-  const showNowMarker = nowLeft >= 0 && nowLeft <= total
+  const nowLeft = calcLeft(now.toISOString(), anchor, view)
+  const showNowMarker = nowLeft >= 0 && nowLeft <= totalWidth
 
   return (
     <div className="flex-1 relative" style={{ height: 48 }}>
@@ -46,13 +45,13 @@ export function TaskTrack({ poolId }: Props) {
       </div>
 
       {/* Tasks drop zone */}
-      <div ref={setNodeRef} className="relative h-full" style={{ width: total }}>
+      <div ref={setNodeRef} className="relative h-full" style={{ width: totalWidth }}>
         <SortableContext items={tasks.map(t => t.id)} strategy={horizontalListSortingStrategy}>
           {tasks.map(task => (
             <TaskBar
               key={task.id}
               task={task}
-              left={calcLeft(task.scheduledStart, vStart, view)}
+              left={calcLeft(task.scheduledStart, anchor, view)}
               width={calcWidth(task.scheduledStart, task.scheduledEnd, view)}
             />
           ))}
