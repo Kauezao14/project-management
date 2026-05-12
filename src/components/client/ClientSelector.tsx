@@ -35,8 +35,6 @@ type FormState = {
   hasLunch: boolean
   lunchStartTime: string  // "HH:MM"
   lunchEndTime: string    // "HH:MM"
-  hasOvertime: boolean
-  overtimeHours: string
   workDays: number[]
 }
 
@@ -50,8 +48,6 @@ const DEFAULT_FORM: FormState = {
   hasLunch: true,
   lunchStartTime: '12:00',
   lunchEndTime: '13:00',
-  hasOvertime: false,
-  overtimeHours: '2',
   workDays: [1, 2, 3, 4, 5],
 }
 
@@ -256,30 +252,6 @@ function CompanyForm({
           )}
         </div>
 
-        {/* Overtime */}
-        <div className="border border-gray-100 rounded-xl p-3 space-y-2">
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={form.hasOvertime}
-              onChange={e => set('hasOvertime', e.target.checked)}
-              className="rounded"
-            />
-            <span className="text-sm font-medium text-gray-700">Permite hora extra</span>
-          </label>
-          {form.hasOvertime && (
-            <div className="pt-1">
-              <label className="block text-xs font-medium text-gray-600 mb-1">Horas extras disponíveis</label>
-              <input
-                type="number" min="0.5" max="8" step="0.5"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                value={form.overtimeHours}
-                onChange={e => set('overtimeHours', e.target.value)}
-                placeholder="Ex: 2"
-              />
-            </div>
-          )}
-        </div>
       </div>
 
       <div className="flex gap-2 mt-6">
@@ -304,7 +276,6 @@ function CompanyForm({
 }
 
 function formToConfig(form: FormState): Omit<ClientConfig, 'id' | 'createdAt' | 'taskExtraFields'> {
-  const ot = parseFloat(form.overtimeHours)
   const poolLabel = form.poolLabel.trim()
   const taskLabel = form.taskLabel.trim()
   return {
@@ -320,7 +291,6 @@ function formToConfig(form: FormState): Omit<ClientConfig, 'id' | 'createdAt' | 
       workDays: form.workDays,
       lunchStart: form.hasLunch && form.lunchStartTime ? fromTimeStr(form.lunchStartTime) : undefined,
       lunchEnd:   form.hasLunch && form.lunchEndTime   ? fromTimeStr(form.lunchEndTime)   : undefined,
-      overtimeHours: form.hasOvertime && !isNaN(ot) && form.overtimeHours !== '' ? ot : undefined,
     },
   }
 }
@@ -337,8 +307,6 @@ function configToForm(c: ClientConfig): FormState {
     hasLunch: cal.lunchStart !== undefined,
     lunchStartTime: cal.lunchStart !== undefined ? toTimeStr(cal.lunchStart) : '12:00',
     lunchEndTime:   cal.lunchEnd   !== undefined ? toTimeStr(cal.lunchEnd)   : '13:00',
-    hasOvertime: cal.overtimeHours !== undefined,
-    overtimeHours: cal.overtimeHours !== undefined ? String(cal.overtimeHours) : '2',
     workDays: cal.workDays,
   }
 }

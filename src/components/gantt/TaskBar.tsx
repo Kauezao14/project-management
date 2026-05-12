@@ -131,7 +131,7 @@ export function TaskBar({ task, left, width }: Props) {
             </span>
           )}
           {task.overtime && (
-            <span title="Hora extra" className="text-white/90">
+            <span title={`Hora extra (+${task.overtimeHours ?? '?'}h)`} className="text-white/90">
               <Moon size={10} />
             </span>
           )}

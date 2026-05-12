@@ -14,7 +14,6 @@ export interface WorkCalendar {
   workDays: number[]    // 0=Dom, 1=Seg...6=Sab
   lunchStart?: number
   lunchEnd?: number
-  overtimeHours?: number
 }
 
 export interface ClientConfig {

@@ -20,8 +20,9 @@ export interface Task {
   moldRef?: string
   quantity?: number
   // Scheduling modifiers
-  overtime?: boolean    // trabalha horas extras após o fim do expediente
-  lunchWork?: boolean   // trabalha no intervalo de almoço
+  overtime?: boolean       // estende o expediente além do horário normal
+  overtimeHours?: number   // quantas horas extras (ex: 2)
+  lunchWork?: boolean      // trabalha no intervalo de almoço
   // Project assignment
   projectId?: string
   // Delay tracking

@@ -15,6 +15,7 @@ type FormData = {
   notes: string
   status: Task['status']
   overtime: boolean
+  overtimeHours: string
   lunchWork: boolean
   projectId: string
   [key: string]: string | boolean
@@ -100,6 +101,7 @@ export function TaskForm() {
     notes: task?.notes ?? '',
     status: task?.status ?? 'pending',
     overtime: task?.overtime ?? false,
+    overtimeHours: task?.overtimeHours?.toString() ?? '2',
     lunchWork: task?.lunchWork ?? false,
     projectId: task?.projectId ?? '',
     ...(client?.taskExtraFields ?? []).reduce((acc, f) => ({
@@ -141,6 +143,7 @@ export function TaskForm() {
       durationHours: parseFloat(form.durationHours as string),
       notes: (form.notes as string).trim() || undefined,
       overtime: form.overtime as boolean,
+      overtimeHours: form.overtime ? parseFloat(form.overtimeHours as string) || 2 : undefined,
       lunchWork: form.lunchWork as boolean,
       projectId: (form.projectId as string) || undefined,
       ...extraData,
@@ -220,15 +223,32 @@ export function TaskForm() {
         <div>
           <div className="text-xs font-medium text-gray-500 mb-2">Regime de trabalho</div>
           <div className="space-y-2">
-            {cal?.overtimeHours && (
-              <Toggle
-                checked={form.overtime as boolean}
-                onChange={v => setField('overtime', v)}
-                icon={<Moon size={15} />}
-                label="Hora extra"
-                description={`Trabalha até ${cal.endHour + cal.overtimeHours}h (mais ${cal.overtimeHours}h após expediente)`}
-                color="#f59e0b"
-              />
+            <Toggle
+              checked={form.overtime as boolean}
+              onChange={v => setField('overtime', v)}
+              icon={<Moon size={15} />}
+              label="Hora extra"
+              description={
+                form.overtime
+                  ? `Expediente estendido até ${cal ? cal.endHour + (parseFloat(form.overtimeHours as string) || 2) : '?'}h`
+                  : 'Atividade será encerrada no fim do expediente'
+              }
+              color="#f59e0b"
+            />
+            {form.overtime && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-100 rounded-lg">
+                <span className="text-xs text-amber-700 font-medium whitespace-nowrap">Horas extras:</span>
+                <input
+                  type="number"
+                  min="0.5"
+                  max="8"
+                  step="0.5"
+                  className="w-20 border border-amber-200 bg-white rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  value={form.overtimeHours as string}
+                  onChange={e => setField('overtimeHours', e.target.value)}
+                />
+                <span className="text-xs text-amber-600">h além do expediente</span>
+              </div>
             )}
             {cal?.lunchStart !== undefined && cal?.lunchEnd !== undefined && (
               <Toggle
@@ -236,7 +256,7 @@ export function TaskForm() {
                 onChange={v => setField('lunchWork', v)}
                 icon={<Coffee size={15} />}
                 label="Trabalha no almoço"
-                description={`Aproveita o intervalo de ${cal?.lunchStart}h às ${cal?.lunchEnd}h`}
+                description={`Aproveita o intervalo das ${cal?.lunchStart}h às ${cal?.lunchEnd}h`}
                 color="#10b981"
               />
             )}

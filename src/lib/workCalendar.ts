@@ -3,11 +3,11 @@ import type { WorkCalendar } from '../types/client'
 import type { Task } from '../types/task'
 
 /** Calendário efetivo de uma tarefa, aplicando hora extra e almoço trabalhado */
-export function getEffectiveCalendar(cal: WorkCalendar, task: Pick<Task, 'overtime' | 'lunchWork'>): WorkCalendar {
+export function getEffectiveCalendar(cal: WorkCalendar, task: Pick<Task, 'overtime' | 'overtimeHours' | 'lunchWork'>): WorkCalendar {
   return {
     ...cal,
-    endHour: task.overtime && cal.overtimeHours
-      ? cal.endHour + cal.overtimeHours
+    endHour: task.overtime && task.overtimeHours
+      ? cal.endHour + task.overtimeHours
       : cal.endHour,
     lunchStart: task.lunchWork ? undefined : cal.lunchStart,
     lunchEnd:   task.lunchWork ? undefined : cal.lunchEnd,
