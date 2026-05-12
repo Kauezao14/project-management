@@ -22,6 +22,8 @@ export interface Task {
   // Scheduling modifiers
   overtime?: boolean    // trabalha horas extras após o fim do expediente
   lunchWork?: boolean   // trabalha no intervalo de almoço
+  // Project assignment
+  projectId?: string
   // Delay tracking
   delayedSince?: string
   actualEnd?: string

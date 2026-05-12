@@ -3,9 +3,10 @@ import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { CheckCircle, PlayCircle, AlertTriangle, Clock, Trash2, Edit2, Moon, Coffee } from 'lucide-react'
+import { CheckCircle, PlayCircle, AlertTriangle, Clock, Trash2, Edit2, Moon, Coffee, Star } from 'lucide-react'
 import { useStore } from '../../store'
 import { useShallow } from 'zustand/react/shallow'
+import { useCriticalPath } from '../../contexts/CriticalPathContext'
 import type { Task } from '../../types/task'
 
 // Paleta de 12 cores distintas para identificar tarefas individualmente
@@ -56,6 +57,11 @@ export function TaskBar({ task, left, width }: Props) {
     markInProgress: s.markInProgress,
     markDelayed: s.markDelayed,
   })))
+
+  const allProjects = useStore(s => s.projects)
+  const project = task.projectId ? allProjects.find(p => p.id === task.projectId) : null
+  const criticalTaskIds = useCriticalPath()
+  const isCritical = criticalTaskIds.has(task.id)
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
@@ -112,8 +118,13 @@ export function TaskBar({ task, left, width }: Props) {
           </span>
         )}
 
-        {/* Badges de regime */}
+        {/* Badges de regime e projeto */}
         <div className="ml-auto flex items-center gap-0.5 shrink-0">
+          {isCritical && (
+            <span title="Caminho crítico" className="text-yellow-300 drop-shadow-sm">
+              <Star size={10} fill="currentColor" />
+            </span>
+          )}
           {task.lunchWork && (
             <span title="Trabalha no almoço" className="text-white/90">
               <Coffee size={10} />
@@ -128,6 +139,13 @@ export function TaskBar({ task, left, width }: Props) {
             <span className="text-xs font-bold text-white/90 bg-red-600/70 px-1 rounded ml-1">
               Atrasado
             </span>
+          )}
+          {project && (
+            <span
+              title={`Projeto: ${project.name}`}
+              className="w-2 h-2 rounded-full shrink-0 ring-1 ring-white/50"
+              style={{ backgroundColor: project.color }}
+            />
           )}
         </div>
 
@@ -151,8 +169,16 @@ export function TaskBar({ task, left, width }: Props) {
           <div className="flex items-center gap-2 mb-2">
             <span className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: barColor }} />
             <span className="font-semibold text-sm">{task.title}</span>
+            {isCritical && <Star size={12} className="text-yellow-400 shrink-0" fill="currentColor" />}
           </div>
           <div className="text-xs text-gray-300 space-y-1">
+            {project && (
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: project.color }} />
+                <span className="text-gray-400">{project.name}</span>
+                {isCritical && <span className="text-yellow-400 font-medium">· caminho crítico</span>}
+              </div>
+            )}
             <div className="flex items-center gap-1.5">
               <span
                 className="text-xs font-medium px-1.5 py-0.5 rounded"

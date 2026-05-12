@@ -2,6 +2,7 @@ import { STORAGE_KEY } from '../config/constants'
 import type { ClientConfig } from '../types/client'
 import type { Pool } from '../types/pool'
 import type { Task } from '../types/task'
+import type { Project } from '../types/project'
 import type { View } from '../types/app'
 
 export interface PersistedState {
@@ -9,6 +10,7 @@ export interface PersistedState {
   clients: ClientConfig[]
   pools: Pool[]
   tasks: Task[]
+  projects: Project[]
   view: View
   viewportStart: string
 }
@@ -28,9 +30,9 @@ export function loadState(): PersistedState | null {
     const parsed = JSON.parse(raw) as PersistedState
     // Migrate old data that had hardcoded PSG/DOMINUS but no clients array
     if (!parsed.clients || parsed.clients.length === 0) {
-      return { ...parsed, clients: [], activeClient: '', pools: [], tasks: [] }
+      return { ...parsed, clients: [], activeClient: '', pools: [], tasks: [], projects: [] }
     }
-    return parsed
+    return { ...parsed, projects: parsed.projects ?? [] }
   } catch {
     return null
   }

@@ -11,6 +11,7 @@ import { getViewportStart } from '../lib/ganttLayout'
 import type { ClientConfig, WorkCalendar } from '../types/client'
 import type { Pool } from '../types/pool'
 import type { Task } from '../types/task'
+import type { Project } from '../types/project'
 import type { View } from '../types/app'
 
 interface AppState {
@@ -18,11 +19,13 @@ interface AppState {
   activeClient: string
   view: View
   viewportStart: string
+  page: 'gantt' | 'projects'
 
   // Data
   clients: ClientConfig[]
   pools: Pool[]
   tasks: Task[]
+  projects: Project[]
 
   // UI state
   editingPoolId: string | null
@@ -33,6 +36,7 @@ interface AppState {
   // App actions
   setClient: (id: string) => void
   setView: (v: View) => void
+  setPage: (p: 'gantt' | 'projects') => void
   navigateViewport: (direction: -1 | 1) => void
   setViewportStart: (date: Date) => void
   setShowClientSelector: (v: boolean) => void
@@ -41,6 +45,11 @@ interface AppState {
   addClient: (data: Omit<ClientConfig, 'id' | 'createdAt' | 'taskExtraFields'>) => string
   updateClient: (id: string, data: Partial<Omit<ClientConfig, 'id' | 'createdAt'>>) => void
   deleteClient: (id: string) => void
+
+  // Project actions
+  addProject: (name: string, color: string) => string
+  updateProject: (id: string, data: { name?: string; color?: string }) => void
+  deleteProject: (id: string) => void
 
   // Pool actions
   addPool: (name: string) => void
@@ -118,15 +127,18 @@ export const useStore = create<AppState>()(
     activeClient: savedState?.activeClient ?? '',
     view: savedState?.view ?? 'weekly',
     viewportStart: initialViewportStart,
+    page: 'gantt',
     clients: savedState?.clients ?? [],
     pools: savedState?.pools ?? [],
     tasks: savedState?.tasks ?? [],
+    projects: savedState?.projects ?? [],
     editingPoolId: null,
     editingTaskId: null,
     addingTaskToPoolId: null,
     showClientSelector: !savedState || (savedState.clients?.length ?? 0) === 0,
 
     setClient: (id) => set(s => { s.activeClient = id; s.showClientSelector = false }),
+    setPage: (p) => set(s => { s.page = p }),
     setView: (v) => set(s => {
       s.view = v
       s.viewportStart = getViewportStart(v, parseISO(s.viewportStart)).toISOString()
@@ -164,10 +176,27 @@ export const useStore = create<AppState>()(
       s.clients = s.clients.filter(c => c.id !== id)
       s.pools = s.pools.filter(p => p.clientId !== id)
       s.tasks = s.tasks.filter(t => t.clientId !== id)
+      s.projects = s.projects.filter(p => p.clientId !== id)
       if (s.activeClient === id) {
         s.activeClient = s.clients[0]?.id ?? ''
         s.showClientSelector = s.clients.length === 0
       }
+    }),
+
+    addProject: (name, color) => {
+      const id = nanoid()
+      set(s => {
+        s.projects.push({ id, clientId: s.activeClient, name, color, createdAt: new Date().toISOString() })
+      })
+      return id
+    },
+    updateProject: (id, data) => set(s => {
+      const p = s.projects.find(p => p.id === id)
+      if (p) Object.assign(p, data)
+    }),
+    deleteProject: (id) => set(s => {
+      s.projects = s.projects.filter(p => p.id !== id)
+      s.tasks.forEach(t => { if (t.projectId === id) delete t.projectId })
     }),
 
     addPool: (name) => set(s => {
@@ -344,5 +373,6 @@ useStore.subscribe((state) => {
     viewportStart: state.viewportStart,
     pools: state.pools,
     tasks: state.tasks,
+    projects: state.projects,
   })
 })

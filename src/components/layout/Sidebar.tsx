@@ -1,12 +1,14 @@
 import { useStore } from '../../store'
 import { useShallow } from 'zustand/react/shallow'
-import { Plus, Settings } from 'lucide-react'
+import { Plus, Settings, LayoutList, FolderOpen } from 'lucide-react'
 
 export function Sidebar() {
-  const { activeClient, clients, setClient, addPool, setShowClientSelector } = useStore(useShallow(s => ({
+  const { activeClient, clients, page, setClient, setPage, addPool, setShowClientSelector } = useStore(useShallow(s => ({
     activeClient: s.activeClient,
     clients: s.clients,
+    page: s.page,
     setClient: s.setClient,
+    setPage: s.setPage,
     addPool: s.addPool,
     setShowClientSelector: s.setShowClientSelector,
   })))
@@ -19,8 +21,28 @@ export function Sidebar() {
 
   return (
     <aside className="w-56 bg-gray-900 text-white flex flex-col h-full shrink-0">
+      {/* Page navigation */}
+      <div className="px-3 pt-3 pb-2 flex gap-1">
+        <button
+          onClick={() => setPage('gantt')}
+          className={`flex-1 flex items-center justify-center gap-1.5 text-xs py-1.5 rounded-md font-medium transition-colors ${
+            page === 'gantt' ? 'bg-gray-700 text-white' : 'text-gray-500 hover:text-gray-300'
+          }`}
+        >
+          <LayoutList size={13} /> Gantt
+        </button>
+        <button
+          onClick={() => setPage('projects')}
+          className={`flex-1 flex items-center justify-center gap-1.5 text-xs py-1.5 rounded-md font-medium transition-colors ${
+            page === 'projects' ? 'bg-gray-700 text-white' : 'text-gray-500 hover:text-gray-300'
+          }`}
+        >
+          <FolderOpen size={13} /> Projetos
+        </button>
+      </div>
+
       {/* Header */}
-      <div className="px-4 py-4 border-b border-gray-800">
+      <div className="px-4 py-3 border-b border-gray-800">
         <div className="text-xs text-gray-500 uppercase tracking-wider mb-2">Empresa Ativa</div>
         <button
           onClick={() => setShowClientSelector(true)}

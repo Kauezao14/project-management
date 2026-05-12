@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -11,18 +11,25 @@ import {
 } from '@dnd-kit/core'
 import { useStore } from '../../store'
 import { GanttRow } from './GanttRow'
+import { CriticalPathContext } from '../../contexts/CriticalPathContext'
+import { computeAllCriticalTaskIds } from '../../lib/criticalPath'
 
 export function GanttBody() {
   const activeClient = useStore(s => s.activeClient)
   const allPools = useStore(s => s.pools)
   const allClients = useStore(s => s.clients)
+  const allTasks = useStore(s => s.tasks)
   const moveTask = useStore(s => s.moveTask)
   const checkAndPropagateDelays = useStore(s => s.checkAndPropagateDelays)
 
-  // Filter and sort outside the selector (doesn't affect snapshot stability)
   const pools = allPools
     .filter(p => p.clientId === activeClient)
     .sort((a, b) => a.order - b.order)
+
+  const criticalTaskIds = useMemo(
+    () => computeAllCriticalTaskIds(allTasks),
+    [allTasks]
+  )
 
   const [draggingId, setDraggingId] = useState<string | null>(null)
 
@@ -82,22 +89,24 @@ export function GanttBody() {
   const draggingTask = draggingId ? useStore.getState().tasks.find(t => t.id === draggingId) : null
 
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCenter}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-    >
-      {pools.map(pool => (
-        <GanttRow key={pool.id} pool={pool} />
-      ))}
-      <DragOverlay>
-        {draggingTask ? (
-          <div className="bg-blue-500 text-white text-xs px-3 py-1.5 rounded-md shadow-xl opacity-90 pointer-events-none">
-            {draggingTask.title}
-          </div>
-        ) : null}
-      </DragOverlay>
-    </DndContext>
+    <CriticalPathContext.Provider value={criticalTaskIds}>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+      >
+        {pools.map(pool => (
+          <GanttRow key={pool.id} pool={pool} />
+        ))}
+        <DragOverlay>
+          {draggingTask ? (
+            <div className="bg-blue-500 text-white text-xs px-3 py-1.5 rounded-md shadow-xl opacity-90 pointer-events-none">
+              {draggingTask.title}
+            </div>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
+    </CriticalPathContext.Provider>
   )
 }

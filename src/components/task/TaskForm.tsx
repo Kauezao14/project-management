@@ -16,6 +16,7 @@ type FormData = {
   status: Task['status']
   overtime: boolean
   lunchWork: boolean
+  projectId: string
   [key: string]: string | boolean
 }
 
@@ -72,12 +73,13 @@ function Toggle({
 }
 
 export function TaskForm() {
-  const { editingTaskId, addingTaskToPoolId, tasks, activeClient, clients, addTask, updateTask, setEditingTask, setAddingTaskToPool } = useStore(useShallow(s => ({
+  const { editingTaskId, addingTaskToPoolId, tasks, activeClient, clients, projects, addTask, updateTask, setEditingTask, setAddingTaskToPool } = useStore(useShallow(s => ({
     editingTaskId: s.editingTaskId,
     addingTaskToPoolId: s.addingTaskToPoolId,
     tasks: s.tasks,
     activeClient: s.activeClient,
     clients: s.clients,
+    projects: s.projects,
     addTask: s.addTask,
     updateTask: s.updateTask,
     setEditingTask: s.setEditingTask,
@@ -90,6 +92,7 @@ export function TaskForm() {
   const taskClientId = isEditing ? (task?.clientId ?? activeClient) : activeClient
   const client = clients.find(c => c.id === taskClientId)!
   const cal = client?.workCalendar
+  const clientProjects = projects.filter(p => p.clientId === taskClientId)
 
   const [form, setForm] = useState<FormData>({
     title: task?.title ?? '',
@@ -98,6 +101,7 @@ export function TaskForm() {
     status: task?.status ?? 'pending',
     overtime: task?.overtime ?? false,
     lunchWork: task?.lunchWork ?? false,
+    projectId: task?.projectId ?? '',
     ...(client?.taskExtraFields ?? []).reduce((acc, f) => ({
       ...acc,
       [f.key]: String((task as unknown as Record<string, unknown>)?.[f.key] ?? ''),
@@ -138,6 +142,7 @@ export function TaskForm() {
       notes: (form.notes as string).trim() || undefined,
       overtime: form.overtime as boolean,
       lunchWork: form.lunchWork as boolean,
+      projectId: (form.projectId as string) || undefined,
       ...extraData,
     }
 
@@ -249,6 +254,18 @@ export function TaskForm() {
             ]}
             value={form.status as string}
             onChange={e => setField('status', e.target.value)}
+          />
+        )}
+
+        {clientProjects.length > 0 && (
+          <Select
+            label="Projeto"
+            options={[
+              { value: '', label: '— Sem projeto —' },
+              ...clientProjects.map(p => ({ value: p.id, label: p.name })),
+            ]}
+            value={form.projectId as string}
+            onChange={e => setField('projectId', e.target.value)}
           />
         )}
 
