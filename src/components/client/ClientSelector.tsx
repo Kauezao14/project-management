@@ -1,7 +1,5 @@
 import { useState, useEffect } from 'react'
 import { Plus, Building2, Edit2, Trash2, X, Check, ExternalLink, Loader } from 'lucide-react'
-import { useStore } from '../../store'
-import { useShallow } from 'zustand/react/shallow'
 import { fetchAllCompanies, upsertCompany, deleteCompany } from '../../lib/supabaseSync'
 import type { ClientConfig } from '../../types/client'
 
@@ -283,8 +281,6 @@ function clientToForm(c: ClientConfig): FormState {
 }
 
 export function ClientSelector() {
-  const { addClient } = useStore(useShallow(s => ({ addClient: s.addClient })))
-
   const [companies, setCompanies] = useState<ClientConfig[]>([])
   const [loadingList, setLoadingList] = useState(true)
   const [mode, setMode] = useState<'list' | 'create' | 'edit'>('list')
@@ -304,12 +300,15 @@ export function ClientSelector() {
 
   const handleCreate = async (form: FormState) => {
     setSaving(true)
-    const id = crypto.randomUUID()
-    const client = formToClient(form, id)
-    addClient(client)
-    await upsertCompany(client)
-    setSaving(false)
-    window.location.hash = `#/c/${form.slug}`
+    try {
+      const id = crypto.randomUUID()
+      const client = formToClient(form, id)
+      await upsertCompany(client)
+      window.location.hash = `#/c/${form.slug}`
+    } catch {
+      alert('Erro ao salvar. Verifique se o slug já está em uso.')
+      setSaving(false)
+    }
   }
 
   const handleEdit = async (form: FormState) => {
