@@ -3,7 +3,7 @@ import { format, parseISO, differenceInHours } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import {
   Plus, Star, Clock, CheckCircle, PlayCircle, AlertTriangle,
-  Edit2, Trash2, X, Check, FolderOpen,
+  Edit2, Trash2, X, Check, FolderOpen, CalendarDays,
 } from 'lucide-react'
 import { useStore } from '../../store'
 import { useShallow } from 'zustand/react/shallow'
@@ -29,17 +29,18 @@ function ProjectForm({
   onSave,
   onCancel,
 }: {
-  initial: { name: string; color: string }
-  onSave: (name: string, color: string) => void
+  initial: { name: string; color: string; startDate?: string }
+  onSave: (name: string, color: string, startDate?: string) => void
   onCancel: () => void
 }) {
   const [name, setName] = useState(initial.name)
   const [color, setColor] = useState(initial.color)
+  const [startDate, setStartDate] = useState(initial.startDate ?? '')
   const [error, setError] = useState('')
 
   const handleSave = () => {
     if (!name.trim()) { setError('Nome obrigatório'); return }
-    onSave(name.trim(), color)
+    onSave(name.trim(), color, startDate || undefined)
   }
 
   return (
@@ -67,6 +68,23 @@ function ProjectForm({
         </div>
       </div>
       {error && <p className="text-xs text-red-500 mb-2">{error}</p>}
+      <div className="flex items-center gap-2 mb-3">
+        <label className="text-xs text-gray-500 shrink-0">Início do projeto</label>
+        <input
+          type="date"
+          className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          value={startDate}
+          onChange={e => setStartDate(e.target.value)}
+        />
+        {startDate && (
+          <button
+            onClick={() => setStartDate('')}
+            className="text-xs text-gray-400 hover:text-gray-600"
+          >
+            <X size={13} />
+          </button>
+        )}
+      </div>
       <div className="flex gap-1.5">
         {PROJECT_COLORS.map(c => (
           <button
@@ -139,8 +157,8 @@ function ProjectCard({ project }: { project: Project }) {
     return (
       <div className="rounded-xl border border-gray-200 p-4">
         <ProjectForm
-          initial={{ name: project.name, color: project.color }}
-          onSave={(name, color) => { updateProject(project.id, { name, color }); setEditing(false) }}
+          initial={{ name: project.name, color: project.color, startDate: project.startDate }}
+          onSave={(name, color, startDate) => { updateProject(project.id, { name, color, startDate }); setEditing(false) }}
           onCancel={() => setEditing(false)}
         />
       </div>
@@ -173,9 +191,15 @@ function ProjectCard({ project }: { project: Project }) {
               <ProgressBar value={progress} color={project.color} />
             </div>
             <span className="text-xs text-gray-400">{done}/{total} tarefas</span>
+            {project.startDate && (
+              <span className="flex items-center gap-1 text-xs text-gray-400">
+                <CalendarDays size={11} />
+                {format(parseISO(project.startDate), "dd/MM/yy", { locale: ptBR })}
+              </span>
+            )}
             {startDate && endDate && (
               <span className="text-xs text-gray-400">
-                {format(startDate, "dd/MM", { locale: ptBR })} → {format(endDate, "dd/MM HH:mm", { locale: ptBR })} · {durationH}h
+                → {format(endDate, "dd/MM HH:mm", { locale: ptBR })} · {durationH}h
               </span>
             )}
           </div>
@@ -276,7 +300,7 @@ export function ProjectsPage() {
           <div className="mb-4">
             <ProjectForm
               initial={{ name: '', color: PROJECT_COLORS[0] }}
-              onSave={(name, color) => { addProject(name, color); setCreating(false) }}
+              onSave={(name, color, startDate) => { addProject(name, color, startDate); setCreating(false) }}
               onCancel={() => setCreating(false)}
             />
           </div>

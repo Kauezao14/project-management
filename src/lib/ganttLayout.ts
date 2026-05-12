@@ -23,9 +23,10 @@ export function calcLeft(scheduledStart: string, viewportStart: Date, view: View
   return (diffMin / 60) * pxPerHour(view)
 }
 
-/** Pixel width for a task with given duration */
-export function calcWidth(durationHours: number, view: View): number {
-  return durationHours * pxPerHour(view)
+/** Pixel width for a task based on its real wall-clock span (start → end) */
+export function calcWidth(scheduledStart: string, scheduledEnd: string, view: View): number {
+  const diffMin = differenceInMinutes(new Date(scheduledEnd), new Date(scheduledStart))
+  return Math.max((diffMin / 60) * pxPerHour(view), 0)
 }
 
 /** Total width of the whole timeline area */

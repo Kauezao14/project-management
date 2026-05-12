@@ -40,6 +40,7 @@ function rowToProject(row: Record<string, unknown>): Project {
     clientId: row.company_id as string,
     name: row.name as string,
     color: row.color as string,
+    startDate: (row.start_date as string) ?? undefined,
     createdAt: row.created_at as string,
   }
 }
@@ -181,6 +182,7 @@ export async function upsertProject(project: Project): Promise<void> {
     company_id: project.clientId,
     name: project.name,
     color: project.color,
+    start_date: project.startDate ?? null,
   }, { onConflict: 'id' })
 }
 

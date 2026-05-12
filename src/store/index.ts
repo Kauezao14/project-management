@@ -64,8 +64,8 @@ interface AppState {
   deleteClient: (id: string) => void
   setClient: (id: string) => void
 
-  addProject: (name: string, color: string) => string
-  updateProject: (id: string, data: { name?: string; color?: string }) => void
+  addProject: (name: string, color: string, startDate?: string) => string
+  updateProject: (id: string, data: { name?: string; color?: string; startDate?: string }) => void
   deleteProject: (id: string) => void
 
   addPool: (name: string) => void
@@ -186,10 +186,10 @@ export const useStore = create<AppState>()(
     },
     setClient: (id) => set(s => { s.activeClient = id }),
 
-    addProject: (name, color) => {
+    addProject: (name, color, startDate) => {
       const id = nanoid()
       set(s => {
-        s.projects.push({ id, clientId: s.activeClient, name, color, createdAt: new Date().toISOString() })
+        s.projects.push({ id, clientId: s.activeClient, name, color, startDate, createdAt: new Date().toISOString() })
       })
       const project = get().projects.find(p => p.id === id)!
       markLocalWrite(); upsertProject(project).catch(console.error)
@@ -252,7 +252,7 @@ export const useStore = create<AppState>()(
           scheduledEnd: new Date().toISOString(),
           status: data.status ?? 'pending',
         })
-        rescheduleAll(s.tasks, s.pools, s.clients)
+        rescheduleAll(s.tasks, s.pools, s.clients, s.projects)
       })
       markLocalWrite(); upsertTasks(get().tasks).catch(console.error)
     },
@@ -262,7 +262,7 @@ export const useStore = create<AppState>()(
         const task = s.tasks.find(t => t.id === id)
         if (!task) return
         Object.assign(task, data)
-        rescheduleAll(s.tasks, s.pools, s.clients)
+        rescheduleAll(s.tasks, s.pools, s.clients, s.projects)
       })
       markLocalWrite(); upsertTasks(get().tasks).catch(console.error)
     },
@@ -277,7 +277,7 @@ export const useStore = create<AppState>()(
         for (const pid of pools) {
           s.tasks.filter(t => t.poolId === pid).sort((a, b) => a.order - b.order).forEach((t, i) => { t.order = i })
         }
-        rescheduleAll(s.tasks, s.pools, s.clients)
+        rescheduleAll(s.tasks, s.pools, s.clients, s.projects)
       })
       markLocalWrite()
       dbDeleteTask(id).catch(console.error)
@@ -297,7 +297,7 @@ export const useStore = create<AppState>()(
       targetTasks.forEach((t, i) => { t.order = i })
       task.poolId = toPoolId
       task.clientId = targetPool.clientId
-      rescheduleAll(s.tasks, s.pools, s.clients)
+      rescheduleAll(s.tasks, s.pools, s.clients, s.projects)
       markLocalWrite(); upsertTasks(s.tasks).catch(console.error)
     }),
 
@@ -310,7 +310,7 @@ export const useStore = create<AppState>()(
         task.status = 'delayed'
         if (!task.delayedSince) task.delayedSince = new Date().toISOString()
         if (actualEnd) task.actualEnd = actualEnd.toISOString()
-        rescheduleAll(s.tasks, s.pools, s.clients)
+        rescheduleAll(s.tasks, s.pools, s.clients, s.projects)
       })
       markLocalWrite(); upsertTasks(get().tasks).catch(console.error)
     },
@@ -319,7 +319,7 @@ export const useStore = create<AppState>()(
       set(s => {
         const task = s.tasks.find(t => t.id === taskId)
         if (task) { task.status = 'completed'; task.actualEnd = task.actualEnd ?? new Date().toISOString() }
-        rescheduleAll(s.tasks, s.pools, s.clients)
+        rescheduleAll(s.tasks, s.pools, s.clients, s.projects)
       })
       markLocalWrite(); upsertTasks(get().tasks).catch(console.error)
     },
@@ -338,7 +338,7 @@ export const useStore = create<AppState>()(
             if (!task.delayedSince) { task.status = 'delayed'; task.delayedSince = now.toISOString(); changed = true }
           }
         }
-        if (changed) rescheduleAll(s.tasks, s.pools, s.clients)
+        if (changed) rescheduleAll(s.tasks, s.pools, s.clients, s.projects)
       })
       if (changed) { markLocalWrite(); upsertTasks(get().tasks).catch(console.error) }
     },

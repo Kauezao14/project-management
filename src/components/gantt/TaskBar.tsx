@@ -114,12 +114,12 @@ export function TaskBar({ task, left, width }: Props) {
 
   const barColor = taskColor(task.id)
   const meta = STATUS_META[task.status]
-  const minWidth = width >= 80
+  const minWidth = width >= 60
 
   const barStyle = {
     position: 'absolute' as const,
     left,
-    width: Math.max(width, 60),
+    width: Math.max(width, 8),
     top: 6,
     height: 36,
     transform: CSS.Transform.toString(transform),

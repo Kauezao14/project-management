@@ -53,7 +53,7 @@ export function TaskTrack({ poolId }: Props) {
               key={task.id}
               task={task}
               left={calcLeft(task.scheduledStart, vStart, view)}
-              width={calcWidth(task.durationHours, view)}
+              width={calcWidth(task.scheduledStart, task.scheduledEnd, view)}
             />
           ))}
         </SortableContext>

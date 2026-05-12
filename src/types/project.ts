@@ -3,5 +3,6 @@ export interface Project {
   clientId: string
   name: string
   color: string
+  startDate?: string
   createdAt: string
 }

@@ -3,6 +3,7 @@ import { addWorkHours, snapToWorkStart, getEffectiveCalendar } from './workCalen
 import type { Task } from '../types/task'
 import type { Pool } from '../types/pool'
 import type { ClientConfig } from '../types/client'
+import type { Project } from '../types/project'
 
 function effectiveEnd(task: Task): Date {
   return parseISO(task.actualEnd ?? task.scheduledEnd)
@@ -15,10 +16,11 @@ function effectiveEnd(task: Task): Date {
  * Usa ordenação topológica iterativa para garantir que toda dependência
  * seja processada antes da tarefa que depende dela.
  */
-export function rescheduleAll(tasks: Task[], pools: Pool[], clients: ClientConfig[]): void {
+export function rescheduleAll(tasks: Task[], pools: Pool[], clients: ClientConfig[], projects: Project[] = []): void {
   const now = new Date()
   const taskMap = new Map(tasks.map(t => [t.id, t]))
   const clientMap = new Map(clients.map(c => [c.id, c]))
+  const projectMap = new Map(projects.map(p => [p.id, p]))
 
   // Ordem das tarefas dentro de cada pool
   const poolOrder = new Map<string, string[]>()
@@ -62,8 +64,10 @@ export function rescheduleAll(tasks: Task[], pools: Pool[], clients: ClientConfi
       const cal = client.workCalendar
       const effectiveCal = getEffectiveCalendar(cal, task)
 
-      // Início = máximo entre (agora) e (fim de cada dependência)
-      let start = snapToWorkStart(now, cal)
+      // Início = máximo entre (floor do projeto ou agora) e (fim de cada dependência)
+      const proj = task.projectId ? projectMap.get(task.projectId) : undefined
+      const floorDate = proj?.startDate ? parseISO(proj.startDate) : now
+      let start = snapToWorkStart(floorDate, cal)
       for (const depId of deps) {
         const dep = taskMap.get(depId)!
         const depEnd = snapToWorkStart(effectiveEnd(dep), cal)
