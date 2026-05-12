@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Moon, Coffee } from 'lucide-react'
+import { Moon, Coffee, GitMerge } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
@@ -18,7 +18,8 @@ type FormData = {
   overtimeHours: string
   lunchWork: boolean
   projectId: string
-  [key: string]: string | boolean
+  predecessors: string[]
+  [key: string]: string | boolean | string[]
 }
 
 function Toggle({
@@ -59,7 +60,6 @@ function Toggle({
         </div>
         <div className="text-xs text-gray-400 mt-0.5">{description}</div>
       </div>
-      {/* Switch visual */}
       <div
         className="shrink-0 w-9 h-5 rounded-full relative transition-colors"
         style={{ backgroundColor: checked ? color : '#d1d5db' }}
@@ -74,10 +74,14 @@ function Toggle({
 }
 
 export function TaskForm() {
-  const { editingTaskId, addingTaskToPoolId, tasks, activeClient, clients, projects, addTask, updateTask, setEditingTask, setAddingTaskToPool } = useStore(useShallow(s => ({
+  const {
+    editingTaskId, addingTaskToPoolId, tasks, pools, activeClient, clients, projects,
+    addTask, updateTask, setEditingTask, setAddingTaskToPool,
+  } = useStore(useShallow(s => ({
     editingTaskId: s.editingTaskId,
     addingTaskToPoolId: s.addingTaskToPoolId,
     tasks: s.tasks,
+    pools: s.pools,
     activeClient: s.activeClient,
     clients: s.clients,
     projects: s.projects,
@@ -104,6 +108,7 @@ export function TaskForm() {
     overtimeHours: task?.overtimeHours?.toString() ?? '2',
     lunchWork: task?.lunchWork ?? false,
     projectId: task?.projectId ?? '',
+    predecessors: task?.predecessors ?? [],
     ...(client?.taskExtraFields ?? []).reduce((acc, f) => ({
       ...acc,
       [f.key]: String((task as unknown as Record<string, unknown>)?.[f.key] ?? ''),
@@ -146,6 +151,7 @@ export function TaskForm() {
       overtimeHours: form.overtime ? parseFloat(form.overtimeHours as string) || 2 : undefined,
       lunchWork: form.lunchWork as boolean,
       projectId: (form.projectId as string) || undefined,
+      predecessors: (form.predecessors as string[]).length > 0 ? (form.predecessors as string[]) : undefined,
       ...extraData,
     }
 
@@ -157,12 +163,38 @@ export function TaskForm() {
     onClose()
   }
 
-  const setField = (key: string, value: string | boolean) => {
+  const setField = (key: string, value: string | boolean | string[]) => {
     setForm(prev => ({ ...prev, [key]: value }))
     if (typeof value === 'string' && errors[key]) {
       setErrors(prev => { const n = { ...prev }; delete n[key]; return n })
     }
   }
+
+  const togglePredecessor = (id: string) => {
+    const preds = form.predecessors as string[]
+    setField('predecessors', preds.includes(id) ? preds.filter(p => p !== id) : [...preds, id])
+  }
+
+  // Tasks available as predecessors: same project, not the current task, grouped by pool
+  const selectedProjectId = form.projectId as string
+  const candidateTasks = selectedProjectId
+    ? tasks.filter(t =>
+        t.projectId === selectedProjectId &&
+        t.id !== (task?.id ?? '')
+      )
+    : []
+
+  // Group candidates by pool
+  const candidateByPool = candidateTasks.reduce<{ poolId: string; poolName: string; tasks: Task[] }[]>((acc, t) => {
+    const existing = acc.find(g => g.poolId === t.poolId)
+    const poolName = pools.find(p => p.id === t.poolId)?.name ?? t.poolId
+    if (existing) {
+      existing.tasks.push(t)
+    } else {
+      acc.push({ poolId: t.poolId, poolName, tasks: [t] })
+    }
+    return acc
+  }, [])
 
   return (
     <Modal
@@ -193,7 +225,7 @@ export function TaskForm() {
           placeholder="Ex: 8"
         />
 
-        {/* Campos extras do cliente */}
+        {/* Client extra fields */}
         {(client?.taskExtraFields ?? []).map(field => (
           field.type === 'select' ? (
             <Select
@@ -219,7 +251,7 @@ export function TaskForm() {
           )
         ))}
 
-        {/* Modificadores de agenda */}
+        {/* Work schedule */}
         <div>
           <div className="text-xs font-medium text-gray-500 mb-2">Regime de trabalho</div>
           <div className="space-y-2">
@@ -277,6 +309,7 @@ export function TaskForm() {
           />
         )}
 
+        {/* Project selector */}
         {clientProjects.length > 0 && (
           <Select
             label="Projeto"
@@ -285,8 +318,50 @@ export function TaskForm() {
               ...clientProjects.map(p => ({ value: p.id, label: p.name })),
             ]}
             value={form.projectId as string}
-            onChange={e => setField('projectId', e.target.value)}
+            onChange={e => {
+              setField('projectId', e.target.value)
+              setField('predecessors', [])
+            }}
           />
+        )}
+
+        {/* Predecessor selector — only when a project is selected and there are candidates */}
+        {selectedProjectId && candidateByPool.length > 0 && (
+          <div>
+            <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500 mb-2">
+              <GitMerge size={12} />
+              Predecessoras (deve terminar antes desta)
+            </div>
+            <div className="border border-gray-200 rounded-lg overflow-hidden divide-y divide-gray-100">
+              {candidateByPool.map(group => (
+                <div key={group.poolId} className="px-3 py-2">
+                  <div className="text-xs font-semibold text-gray-400 mb-1.5">{group.poolName}</div>
+                  <div className="space-y-1">
+                    {group.tasks.map(t => {
+                      const checked = (form.predecessors as string[]).includes(t.id)
+                      return (
+                        <label
+                          key={t.id}
+                          className={`flex items-center gap-2 cursor-pointer rounded px-2 py-1 text-xs transition-colors ${
+                            checked ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50 text-gray-600'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => togglePredecessor(t.id)}
+                            className="rounded text-blue-600 focus:ring-blue-500"
+                          />
+                          <span className="flex-1 truncate font-medium">{t.title}</span>
+                          <span className="text-gray-400 shrink-0">{t.durationHours}h</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
 
         <Textarea

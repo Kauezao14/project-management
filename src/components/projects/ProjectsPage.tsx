@@ -201,7 +201,7 @@ function ProjectCard({ project }: { project: Project }) {
         <div className="border-t border-gray-100 divide-y divide-gray-50">
           {pathInfo.pools.map(poolInfo => {
             const pool = allPools.find(p => p.id === poolInfo.poolId)
-            const floatH = Math.round(poolInfo.floatMs / 3_600_000 * 10) / 10
+            const floatH = Math.round(poolInfo.floatH * 10) / 10
 
             return (
               <div key={poolInfo.poolId} className="px-4 py-2">

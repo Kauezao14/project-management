@@ -25,6 +25,7 @@ export interface Task {
   lunchWork?: boolean      // trabalha no intervalo de almoço
   // Project assignment
   projectId?: string
+  predecessors?: string[]  // IDs de tarefas que devem terminar antes desta
   // Delay tracking
   delayedSince?: string
   actualEnd?: string

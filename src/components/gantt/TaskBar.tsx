@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { format, parseISO } from 'date-fns'
@@ -9,29 +10,26 @@ import { useShallow } from 'zustand/react/shallow'
 import { useCriticalPath } from '../../contexts/CriticalPathContext'
 import type { Task } from '../../types/task'
 
-// Paleta de 12 cores distintas para identificar tarefas individualmente
 const TASK_PALETTE = [
-  '#3b82f6', // blue
-  '#8b5cf6', // violet
-  '#f59e0b', // amber
-  '#10b981', // emerald
-  '#ec4899', // pink
-  '#06b6d4', // cyan
-  '#f97316', // orange
-  '#6366f1', // indigo
-  '#14b8a6', // teal
-  '#a855f7', // purple
-  '#84cc16', // lime
-  '#ef4444', // red (reservado mas disponível se necessário)
+  '#3b82f6',
+  '#8b5cf6',
+  '#f59e0b',
+  '#10b981',
+  '#ec4899',
+  '#06b6d4',
+  '#f97316',
+  '#6366f1',
+  '#14b8a6',
+  '#a855f7',
+  '#84cc16',
+  '#ef4444',
 ]
 
-// Cor determinística baseada no ID da tarefa — sempre a mesma cor para o mesmo ID
 function taskColor(id: string): string {
   let hash = 0
   for (let i = 0; i < id.length; i++) {
     hash = (hash * 31 + id.charCodeAt(i)) >>> 0
   }
-  // Evita o vermelho (índice 11) para não confundir com "Atrasado"
   return TASK_PALETTE[hash % (TASK_PALETTE.length - 1)]
 }
 
@@ -49,7 +47,11 @@ interface Props {
 }
 
 export function TaskBar({ task, left, width }: Props) {
-  const [hovered, setHovered] = useState(false)
+  const [open, setOpen] = useState(false)
+  const barRef = useRef<HTMLDivElement | null>(null)
+  const popupRef = useRef<HTMLDivElement | null>(null)
+  const [popupStyle, setPopupStyle] = useState<React.CSSProperties>({})
+
   const { setEditingTask, deleteTask, markCompleted, markInProgress, markDelayed } = useStore(useShallow(s => ({
     setEditingTask: s.setEditingTask,
     deleteTask: s.deleteTask,
@@ -68,11 +70,53 @@ export function TaskBar({ task, left, width }: Props) {
     data: { type: 'task', task },
   })
 
+  // Combined ref for DnD + local ref
+  const combinedRef = (el: HTMLDivElement | null) => {
+    setNodeRef(el)
+    barRef.current = el
+  }
+
+  // Close popup when clicking outside both the bar and the popup
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: PointerEvent) => {
+      const target = e.target as Node
+      if (
+        (!popupRef.current || !popupRef.current.contains(target)) &&
+        (!barRef.current || !barRef.current.contains(target))
+      ) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('pointerdown', handler)
+    return () => document.removeEventListener('pointerdown', handler)
+  }, [open])
+
+  const handleBarClick = () => {
+    if (!barRef.current) return
+    const rect = barRef.current.getBoundingClientRect()
+    const style: React.CSSProperties = {
+      position: 'fixed',
+      left: Math.min(rect.left, window.innerWidth - 292),
+      zIndex: 9999,
+      minWidth: 220,
+      maxWidth: 280,
+    }
+    // Show above if enough space, otherwise below
+    if (rect.top > 260) {
+      style.bottom = window.innerHeight - rect.top + 8
+    } else {
+      style.top = rect.bottom + 8
+    }
+    setPopupStyle(style)
+    setOpen(v => !v)
+  }
+
   const barColor = taskColor(task.id)
   const meta = STATUS_META[task.status]
   const minWidth = width >= 80
 
-  const style = {
+  const barStyle = {
     position: 'absolute' as const,
     left,
     width: Math.max(width, 60),
@@ -80,97 +124,96 @@ export function TaskBar({ task, left, width }: Props) {
     height: 36,
     transform: CSS.Transform.toString(transform),
     transition,
-    zIndex: isDragging ? 50 : hovered ? 10 : 1,
+    zIndex: isDragging ? 50 : open ? 10 : 1,
     opacity: isDragging ? 0.7 : meta.opacity,
   }
 
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className="task-bar cursor-grab active:cursor-grabbing select-none"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      {...attributes}
-      {...listeners}
-    >
-      {/* Borda de status à esquerda */}
+    <>
       <div
-        className="w-full h-full rounded-md flex items-center px-2 gap-1.5 overflow-hidden relative"
-        style={{
-          backgroundColor: barColor,
-          // Borda esquerda grossa indica o status
-          boxShadow: meta.borderColor
-            ? `inset 3px 0 0 0 ${meta.borderColor}, 0 1px 3px rgba(0,0,0,0.25)`
-            : '0 1px 3px rgba(0,0,0,0.2)',
-          outline: `1px solid rgba(0,0,0,0.15)`,
-        }}
+        ref={combinedRef}
+        style={barStyle}
+        className="task-bar cursor-grab active:cursor-grabbing select-none"
+        onClick={handleBarClick}
+        {...attributes}
+        {...listeners}
       >
-        {/* Ícone de status */}
-        {task.status === 'delayed'     && <AlertTriangle size={11} className="shrink-0 text-white" />}
-        {task.status === 'completed'   && <CheckCircle   size={11} className="shrink-0 text-white" />}
-        {task.status === 'in_progress' && <PlayCircle    size={11} className="shrink-0 text-white" />}
+        <div
+          className="w-full h-full rounded-md flex items-center px-2 gap-1.5 overflow-hidden relative"
+          style={{
+            backgroundColor: barColor,
+            boxShadow: meta.borderColor
+              ? `inset 3px 0 0 0 ${meta.borderColor}, 0 1px 3px rgba(0,0,0,0.25)`
+              : '0 1px 3px rgba(0,0,0,0.2)',
+            outline: open ? '2px solid rgba(255,255,255,0.6)' : '1px solid rgba(0,0,0,0.15)',
+          }}
+        >
+          {task.status === 'delayed'     && <AlertTriangle size={11} className="shrink-0 text-white" />}
+          {task.status === 'completed'   && <CheckCircle   size={11} className="shrink-0 text-white" />}
+          {task.status === 'in_progress' && <PlayCircle    size={11} className="shrink-0 text-white" />}
 
-        {/* Título */}
-        {minWidth && (
-          <span className="text-xs text-white font-semibold truncate leading-none drop-shadow-sm">
-            {task.title}
-          </span>
-        )}
+          {minWidth && (
+            <span className="text-xs text-white font-semibold truncate leading-none drop-shadow-sm">
+              {task.title}
+            </span>
+          )}
 
-        {/* Badges de regime e projeto */}
-        <div className="ml-auto flex items-center gap-0.5 shrink-0">
-          {isCritical && (
-            <span title="Caminho crítico" className="text-yellow-300 drop-shadow-sm">
-              <Star size={10} fill="currentColor" />
-            </span>
-          )}
-          {task.lunchWork && (
-            <span title="Trabalha no almoço" className="text-white/90">
-              <Coffee size={10} />
-            </span>
-          )}
-          {task.overtime && (
-            <span title={`Hora extra (+${task.overtimeHours ?? '?'}h)`} className="text-white/90">
-              <Moon size={10} />
-            </span>
-          )}
-          {task.status === 'delayed' && minWidth && (
-            <span className="text-xs font-bold text-white/90 bg-red-600/70 px-1 rounded ml-1">
-              Atrasado
-            </span>
-          )}
-          {project && (
-            <span
-              title={`Projeto: ${project.name}`}
-              className="w-2 h-2 rounded-full shrink-0 ring-1 ring-white/50"
-              style={{ backgroundColor: project.color }}
+          <div className="ml-auto flex items-center gap-0.5 shrink-0">
+            {isCritical && (
+              <span title="Caminho crítico" className="text-yellow-300 drop-shadow-sm">
+                <Star size={10} fill="currentColor" />
+              </span>
+            )}
+            {task.lunchWork && (
+              <span title="Trabalha no almoço" className="text-white/90">
+                <Coffee size={10} />
+              </span>
+            )}
+            {task.overtime && (
+              <span title={`Hora extra (+${task.overtimeHours ?? '?'}h)`} className="text-white/90">
+                <Moon size={10} />
+              </span>
+            )}
+            {task.status === 'delayed' && minWidth && (
+              <span className="text-xs font-bold text-white/90 bg-red-600/70 px-1 rounded ml-1">
+                Atrasado
+              </span>
+            )}
+            {project && (
+              <span
+                title={`Projeto: ${project.name}`}
+                className="w-2 h-2 rounded-full shrink-0 ring-1 ring-white/50"
+                style={{ backgroundColor: project.color }}
+              />
+            )}
+          </div>
+
+          {task.status === 'completed' && (
+            <div
+              className="absolute inset-0 rounded-md pointer-events-none"
+              style={{
+                backgroundImage: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.1) 0px, rgba(255,255,255,0.1) 2px, transparent 2px, transparent 8px)',
+              }}
             />
           )}
         </div>
-
-        {/* Risco diagonal para concluído */}
-        {task.status === 'completed' && (
-          <div
-            className="absolute inset-0 rounded-md pointer-events-none"
-            style={{
-              backgroundImage: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.1) 0px, rgba(255,255,255,0.1) 2px, transparent 2px, transparent 8px)',
-            }}
-          />
-        )}
       </div>
 
-      {/* Tooltip ao passar o mouse */}
-      {hovered && (
+      {open && createPortal(
         <div
-          className="absolute bottom-full left-0 mb-2 z-50 bg-gray-900 text-white rounded-lg shadow-xl p-3 min-w-52 pointer-events-none"
-          style={{ maxWidth: 280 }}
+          ref={popupRef}
+          className="bg-gray-900 text-white rounded-lg shadow-2xl p-3 pointer-events-auto"
+          style={popupStyle}
+          onPointerDown={e => e.stopPropagation()}
         >
+          {/* Header */}
           <div className="flex items-center gap-2 mb-2">
             <span className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: barColor }} />
-            <span className="font-semibold text-sm">{task.title}</span>
+            <span className="font-semibold text-sm flex-1 truncate">{task.title}</span>
             {isCritical && <Star size={12} className="text-yellow-400 shrink-0" fill="currentColor" />}
           </div>
+
+          {/* Details */}
           <div className="text-xs text-gray-300 space-y-1">
             {project && (
               <div className="flex items-center gap-1.5">
@@ -194,17 +237,16 @@ export function TaskBar({ task, left, width }: Props) {
               <Clock size={10} />
               {task.durationHours}h — início: {format(parseISO(task.scheduledStart), "dd/MM HH:mm", { locale: ptBR })}
             </div>
-            {task.notes && <div className="text-gray-400 pt-1 border-t border-gray-700">{task.notes}</div>}
+            {task.notes && (
+              <div className="text-gray-400 pt-1 border-t border-gray-700">{task.notes}</div>
+            )}
           </div>
 
-          {/* Botões de ação */}
-          <div
-            className="flex gap-1.5 mt-2 pt-2 border-t border-gray-700 pointer-events-auto"
-            onMouseDown={(e) => e.stopPropagation()}
-          >
+          {/* Actions */}
+          <div className="flex gap-1.5 mt-2 pt-2 border-t border-gray-700">
             {task.status !== 'in_progress' && task.status !== 'completed' && (
               <button
-                onClick={(e) => { e.stopPropagation(); markInProgress(task.id) }}
+                onClick={(e) => { e.stopPropagation(); markInProgress(task.id); setOpen(false) }}
                 className="flex items-center gap-1 text-xs bg-amber-500 hover:bg-amber-600 text-white px-2 py-1 rounded"
               >
                 <PlayCircle size={10} /> Iniciar
@@ -212,7 +254,7 @@ export function TaskBar({ task, left, width }: Props) {
             )}
             {task.status !== 'completed' && (
               <button
-                onClick={(e) => { e.stopPropagation(); markCompleted(task.id) }}
+                onClick={(e) => { e.stopPropagation(); markCompleted(task.id); setOpen(false) }}
                 className="flex items-center gap-1 text-xs bg-emerald-500 hover:bg-emerald-600 text-white px-2 py-1 rounded"
               >
                 <CheckCircle size={10} /> Concluir
@@ -220,27 +262,28 @@ export function TaskBar({ task, left, width }: Props) {
             )}
             {task.status === 'in_progress' && (
               <button
-                onClick={(e) => { e.stopPropagation(); markDelayed(task.id) }}
+                onClick={(e) => { e.stopPropagation(); markDelayed(task.id); setOpen(false) }}
                 className="flex items-center gap-1 text-xs bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded"
               >
                 <AlertTriangle size={10} /> Atraso
               </button>
             )}
             <button
-              onClick={(e) => { e.stopPropagation(); setEditingTask(task.id) }}
+              onClick={(e) => { e.stopPropagation(); setEditingTask(task.id); setOpen(false) }}
               className="flex items-center gap-1 text-xs bg-gray-600 hover:bg-gray-500 text-white px-2 py-1 rounded ml-auto"
             >
               <Edit2 size={10} />
             </button>
             <button
-              onClick={(e) => { e.stopPropagation(); deleteTask(task.id) }}
+              onClick={(e) => { e.stopPropagation(); deleteTask(task.id); setOpen(false) }}
               className="flex items-center gap-1 text-xs bg-gray-700 hover:bg-red-600 text-white px-2 py-1 rounded"
             >
               <Trash2 size={10} />
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   )
 }
