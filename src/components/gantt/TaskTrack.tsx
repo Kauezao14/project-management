@@ -47,14 +47,18 @@ export function TaskTrack({ poolId }: Props) {
       {/* Tasks drop zone */}
       <div ref={setNodeRef} className="relative h-full" style={{ width: totalWidth }}>
         <SortableContext items={tasks.map(t => t.id)} strategy={horizontalListSortingStrategy}>
-          {tasks.map(task => (
-            <TaskBar
-              key={task.id}
-              task={task}
-              left={calcLeft(task.scheduledStart, anchor, view)}
-              width={calcWidth(task.scheduledStart, task.scheduledEnd, view)}
-            />
-          ))}
+          {tasks.map((task, i) => {
+            const left = calcLeft(task.scheduledStart, anchor, view)
+            const natural = calcWidth(task.scheduledStart, task.scheduledEnd, view)
+            const nextTask = tasks[i + 1]
+            const available = nextTask
+              ? calcLeft(nextTask.scheduledStart, anchor, view) - left
+              : Infinity
+            const width = Math.max(Math.min(natural, available), 4)
+            return (
+              <TaskBar key={task.id} task={task} left={left} width={width} />
+            )
+          })}
         </SortableContext>
 
         {/* "Now" vertical marker */}

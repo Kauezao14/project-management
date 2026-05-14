@@ -119,7 +119,7 @@ export function TaskBar({ task, left, width }: Props) {
   const barStyle = {
     position: 'absolute' as const,
     left,
-    width: Math.max(width, 8),
+    width,
     top: 6,
     height: 36,
     transform: CSS.Transform.toString(transform),
