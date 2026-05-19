@@ -370,7 +370,7 @@ export function TaskForm() {
               <GitMerge size={12} />
               Predecessoras (deve terminar antes desta)
             </div>
-            <div className="border border-gray-200 rounded-lg overflow-hidden divide-y divide-gray-100">
+            <div className="border border-gray-200 rounded-lg overflow-y-auto divide-y divide-gray-100 max-h-48">
               {candidateByPool.map(group => (
                 <div key={group.poolId} className="px-3 py-2">
                   <div className="text-xs font-semibold text-gray-400 mb-1.5">{group.poolName}</div>
