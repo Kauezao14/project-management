@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -70,11 +70,11 @@ export function TaskBar({ task, left, width }: Props) {
     data: { type: 'task', task },
   })
 
-  // Combined ref for DnD + local ref
-  const combinedRef = (el: HTMLDivElement | null) => {
+  // Stable ref — recreating this on every render confuses dnd-kit's node tracking
+  const combinedRef = useCallback((el: HTMLDivElement | null) => {
     setNodeRef(el)
     barRef.current = el
-  }
+  }, [setNodeRef])
 
   // Close popup when clicking outside both the bar and the popup
   useEffect(() => {
@@ -122,10 +122,12 @@ export function TaskBar({ task, left, width }: Props) {
     width,
     top: 6,
     height: 36,
-    transform: CSS.Transform.toString(transform),
-    transition,
-    zIndex: isDragging ? 50 : open ? 10 : 1,
-    opacity: isDragging ? 0.7 : meta.opacity,
+    // While dragging: stay in place (DragOverlay handles the moving visual).
+    // Applying dnd-kit's translate to absolutely-positioned bars distorts widths.
+    transform: isDragging ? undefined : CSS.Transform.toString(transform),
+    transition: isDragging ? undefined : transition,
+    zIndex: isDragging ? 2 : open ? 10 : 1,
+    opacity: isDragging ? 0.35 : meta.opacity,
   }
 
   return (
