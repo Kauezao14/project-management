@@ -73,7 +73,7 @@ function taskToRow(task: Task): Record<string, unknown> {
   const {
     id, poolId, clientId, title, durationHours, order, status,
     scheduledStart, scheduledEnd, notes, overtime, overtimeHours, lunchWork,
-    projectId, predecessors, delayedSince, actualEnd,
+    projectId, predecessors, delayedSince, actualEnd, pinnedStart,
     machineRef, maintenanceType, moldRef, quantity,
     ...rest
   } = task
@@ -96,6 +96,7 @@ function taskToRow(task: Task): Record<string, unknown> {
     delayed_since: delayedSince ?? null,
     actual_end: actualEnd ?? null,
     extra_data: {
+      ...(pinnedStart !== undefined ? { pinnedStart } : {}),
       ...(machineRef !== undefined ? { machineRef } : {}),
       ...(maintenanceType !== undefined ? { maintenanceType } : {}),
       ...(moldRef !== undefined ? { moldRef } : {}),

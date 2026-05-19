@@ -6,14 +6,23 @@ import {
   useSensor,
   useSensors,
   closestCenter,
+  pointerWithin,
   type DragEndEvent,
   type DragStartEvent,
+  type CollisionDetection,
 } from '@dnd-kit/core'
 import { useStore } from '../../store'
 import { useShallow } from 'zustand/react/shallow'
 import { GanttRow } from './GanttRow'
 import { CriticalPathContext } from '../../contexts/CriticalPathContext'
 import { computeAllCriticalTaskIds } from '../../lib/criticalPath'
+
+// Prefer pointerWithin for large drop zones (empty pools); fall back to closestCenter for task reordering
+const collisionDetection: CollisionDetection = (args) => {
+  const within = pointerWithin(args)
+  if (within.length > 0) return within
+  return closestCenter(args)
+}
 
 export function GanttBody() {
   // Filtered + sorted pool list — only re-renders when pools for this client change
@@ -103,7 +112,7 @@ export function GanttBody() {
     <CriticalPathContext.Provider value={criticalTaskIds}>
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCenter}
+        collisionDetection={collisionDetection}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >

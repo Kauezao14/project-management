@@ -26,6 +26,8 @@ export interface Task {
   // Project assignment
   projectId?: string
   predecessors?: string[]  // IDs de tarefas que devem terminar antes desta
+  // Manual scheduling override
+  pinnedStart?: string  // ISO — se definido, a tarefa não começa antes desta data/hora
   // Delay tracking
   delayedSince?: string
   actualEnd?: string

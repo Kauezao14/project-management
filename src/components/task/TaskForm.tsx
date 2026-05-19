@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
-import { Moon, Coffee, GitMerge } from 'lucide-react'
+import { format, parseISO } from 'date-fns'
+import { Moon, Coffee, GitMerge, CalendarClock, X as XIcon } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
@@ -19,6 +20,7 @@ type FormData = {
   lunchWork: boolean
   projectId: string
   predecessors: string[]
+  pinnedStart: string  // '' = sem pin; formato datetime-local "YYYY-MM-DDTHH:mm"
   [key: string]: string | boolean | string[]
 }
 
@@ -109,6 +111,7 @@ export function TaskForm() {
     lunchWork: task?.lunchWork ?? false,
     projectId: task?.projectId ?? '',
     predecessors: task?.predecessors ?? [],
+    pinnedStart: task?.pinnedStart ? format(parseISO(task.pinnedStart), "yyyy-MM-dd'T'HH:mm") : '',
     ...(client?.taskExtraFields ?? []).reduce((acc, f) => ({
       ...acc,
       [f.key]: String((task as unknown as Record<string, unknown>)?.[f.key] ?? ''),
@@ -143,6 +146,7 @@ export function TaskForm() {
       return { ...acc, [f.key]: f.type === 'number' ? parseFloat(val) : val }
     }, {} as Record<string, unknown>)
 
+    const pinnedStartRaw = (form.pinnedStart as string).trim()
     const base = {
       title: (form.title as string).trim(),
       durationHours: parseFloat(form.durationHours as string),
@@ -152,6 +156,7 @@ export function TaskForm() {
       lunchWork: form.lunchWork as boolean,
       projectId: (form.projectId as string) || undefined,
       predecessors: (form.predecessors as string[]).length > 0 ? (form.predecessors as string[]) : undefined,
+      pinnedStart: pinnedStartRaw ? new Date(pinnedStartRaw).toISOString() : undefined,
       ...extraData,
     }
 
@@ -228,6 +233,35 @@ export function TaskForm() {
           required
           placeholder="Ex: 8"
         />
+
+        {/* Pinned start (optional manual scheduling) */}
+        <div>
+          <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500 mb-1.5">
+            <CalendarClock size={12} />
+            Início manual <span className="font-normal text-gray-400">(opcional)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="datetime-local"
+              className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={form.pinnedStart as string}
+              onChange={e => setField('pinnedStart', e.target.value)}
+            />
+            {form.pinnedStart && (
+              <button
+                type="button"
+                onClick={() => setField('pinnedStart', '')}
+                className="p-1.5 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-100"
+                title="Remover início fixo"
+              >
+                <XIcon size={14} />
+              </button>
+            )}
+          </div>
+          <p className="text-xs text-gray-400 mt-1">
+            A tarefa não começa antes desta data. Se uma predecessora terminar depois, prevalece.
+          </p>
+        </div>
 
         {/* Client extra fields */}
         {(client?.taskExtraFields ?? []).map(field => (
