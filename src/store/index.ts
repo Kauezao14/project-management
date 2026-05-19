@@ -204,13 +204,16 @@ export const useStore = create<AppState>()(
       if (project) { markLocalWrite(); upsertProject(project).catch(console.error) }
     },
     deleteProject: (id) => {
+      const affectedTaskIds = get().tasks.filter(t => t.projectId === id).map(t => t.id)
       set(s => {
         s.projects = s.projects.filter(p => p.id !== id)
         s.tasks.forEach(t => { if (t.projectId === id) delete t.projectId })
       })
       markLocalWrite()
       dbDeleteProject(id).catch(console.error)
-      upsertTasks(get().tasks).catch(console.error)
+      if (affectedTaskIds.length > 0) {
+        upsertTasks(get().tasks.filter(t => affectedTaskIds.includes(t.id))).catch(console.error)
+      }
     },
 
     addPool: (name) => {
@@ -254,20 +257,24 @@ export const useStore = create<AppState>()(
         })
         rescheduleAll(s.tasks, s.pools, s.clients, s.projects)
       })
-      markLocalWrite(); upsertTasks(get().tasks).catch(console.error)
+      markLocalWrite()
+      upsertTasks(get().tasks.filter(t => t.poolId === poolId)).catch(console.error)
     },
 
     updateTask: (id, data) => {
+      const poolId = get().tasks.find(t => t.id === id)?.poolId
       set(s => {
         const task = s.tasks.find(t => t.id === id)
         if (!task) return
         Object.assign(task, data)
         rescheduleAll(s.tasks, s.pools, s.clients, s.projects)
       })
-      markLocalWrite(); upsertTasks(get().tasks).catch(console.error)
+      markLocalWrite()
+      if (poolId) upsertTasks(get().tasks.filter(t => t.poolId === poolId)).catch(console.error)
     },
 
     deleteTask: (id) => {
+      const poolId = get().tasks.find(t => t.id === id)?.poolId
       set(s => {
         s.tasks = s.tasks.filter(t => t.id !== id)
         s.tasks.forEach(t => {
@@ -281,25 +288,31 @@ export const useStore = create<AppState>()(
       })
       markLocalWrite()
       dbDeleteTask(id).catch(console.error)
-      upsertTasks(get().tasks).catch(console.error)
+      if (poolId) upsertTasks(get().tasks.filter(t => t.poolId === poolId)).catch(console.error)
     },
 
-    moveTask: (taskId, toPoolId, toIndex) => set(s => {
-      const task = s.tasks.find(t => t.id === taskId)
-      if (!task) return
-      const targetPool = s.pools.find(p => p.id === toPoolId)
-      if (!targetPool) return
-      s.tasks.filter(t => t.poolId === task.poolId && t.id !== taskId)
-        .sort((a, b) => a.order - b.order).forEach((t, i) => { t.order = i })
-      const targetTasks = s.tasks.filter(t => t.poolId === toPoolId && t.id !== taskId)
-        .sort((a, b) => a.order - b.order)
-      targetTasks.splice(toIndex, 0, task)
-      targetTasks.forEach((t, i) => { t.order = i })
-      task.poolId = toPoolId
-      task.clientId = targetPool.clientId
-      rescheduleAll(s.tasks, s.pools, s.clients, s.projects)
-      markLocalWrite(); upsertTasks(s.tasks).catch(console.error)
-    }),
+    moveTask: (taskId, toPoolId, toIndex) => {
+      const fromPoolId = get().tasks.find(t => t.id === taskId)?.poolId
+      set(s => {
+        const task = s.tasks.find(t => t.id === taskId)
+        if (!task) return
+        const targetPool = s.pools.find(p => p.id === toPoolId)
+        if (!targetPool) return
+        s.tasks.filter(t => t.poolId === task.poolId && t.id !== taskId)
+          .sort((a, b) => a.order - b.order).forEach((t, i) => { t.order = i })
+        const targetTasks = s.tasks.filter(t => t.poolId === toPoolId && t.id !== taskId)
+          .sort((a, b) => a.order - b.order)
+        targetTasks.splice(toIndex, 0, task)
+        targetTasks.forEach((t, i) => { t.order = i })
+        task.poolId = toPoolId
+        task.clientId = targetPool.clientId
+        rescheduleAll(s.tasks, s.pools, s.clients, s.projects)
+      })
+      markLocalWrite()
+      const tasks = get().tasks
+      const poolIds = new Set([fromPoolId, toPoolId].filter(Boolean) as string[])
+      upsertTasks(tasks.filter(t => poolIds.has(t.poolId))).catch(console.error)
+    },
 
     setEditingTask: (id) => set(s => { s.editingTaskId = id }),
 
@@ -310,37 +323,44 @@ export const useStore = create<AppState>()(
         task.status = 'delayed'
         if (!task.delayedSince) task.delayedSince = new Date().toISOString()
         if (actualEnd) task.actualEnd = actualEnd.toISOString()
-        rescheduleAll(s.tasks, s.pools, s.clients, s.projects)
       })
-      markLocalWrite(); upsertTasks(get().tasks).catch(console.error)
+      markLocalWrite()
+      const task = get().tasks.find(t => t.id === taskId)
+      if (task) upsertTasks([task]).catch(console.error)
     },
 
     markCompleted: (taskId) => {
       set(s => {
         const task = s.tasks.find(t => t.id === taskId)
         if (task) { task.status = 'completed'; task.actualEnd = task.actualEnd ?? new Date().toISOString() }
-        rescheduleAll(s.tasks, s.pools, s.clients, s.projects)
       })
-      markLocalWrite(); upsertTasks(get().tasks).catch(console.error)
+      markLocalWrite()
+      const task = get().tasks.find(t => t.id === taskId)
+      if (task) upsertTasks([task]).catch(console.error)
     },
 
     markInProgress: (taskId) => {
       set(s => { const task = s.tasks.find(t => t.id === taskId); if (task) task.status = 'in_progress' })
-      markLocalWrite(); upsertTasks(get().tasks).catch(console.error)
+      markLocalWrite()
+      const task = get().tasks.find(t => t.id === taskId)
+      if (task) upsertTasks([task]).catch(console.error)
     },
 
     checkAndPropagateDelays: () => {
       const now = new Date()
-      let changed = false
+      const changedIds: string[] = []
       set(s => {
         for (const task of s.tasks) {
           if (task.status === 'in_progress' && isAfter(now, parseISO(task.scheduledEnd))) {
-            if (!task.delayedSince) { task.status = 'delayed'; task.delayedSince = now.toISOString(); changed = true }
+            if (!task.delayedSince) { task.status = 'delayed'; task.delayedSince = now.toISOString(); changedIds.push(task.id) }
           }
         }
-        if (changed) rescheduleAll(s.tasks, s.pools, s.clients, s.projects)
+        if (changedIds.length > 0) rescheduleAll(s.tasks, s.pools, s.clients, s.projects)
       })
-      if (changed) { markLocalWrite(); upsertTasks(get().tasks).catch(console.error) }
+      if (changedIds.length > 0) {
+        markLocalWrite()
+        upsertTasks(get().tasks.filter(t => changedIds.includes(t.id))).catch(console.error)
+      }
     },
   }))
 )

@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
@@ -15,7 +16,7 @@ export function TopBar() {
     addPool: s.addPool,
   })))
 
-  const client = clients.find(c => c.id === activeClient)
+  const client = useMemo(() => clients.find(c => c.id === activeClient), [clients, activeClient])
   if (!client) return null
 
   const date = parseISO(viewportStart)

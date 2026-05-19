@@ -35,6 +35,9 @@ export function GanttPage() {
 
   // Tracks which viewportStart value was set by the scroll handler to break the feedback loop
   const scrolledToRef = useRef<string | null>(null)
+  // Stable ref so handleScroll doesn't need viewportStart in its deps
+  const viewportStartRef = useRef(viewportStart)
+  viewportStartRef.current = viewportStart
 
   const { total: totalPeriods } = TIMELINE_PERIODS[view]
   const totalWidth = totalMultiPeriodPx(view, anchor, totalPeriods)
@@ -63,12 +66,12 @@ export function GanttPage() {
     const sl = scrollRef.current.scrollLeft
     const dateAtScroll = scrollLeftToDate(sl, anchor, view)
     const newPeriodStart = getViewportStart(view, dateAtScroll)
-    const currentPeriodStart = parseISO(viewportStart)
+    const currentPeriodStart = parseISO(viewportStartRef.current)
     if (newPeriodStart.getTime() !== currentPeriodStart.getTime()) {
       scrolledToRef.current = newPeriodStart.toISOString()
       setViewportStart(newPeriodStart)
     }
-  }, [anchor, view, viewportStart, setViewportStart])
+  }, [anchor, view, setViewportStart])
 
   const ctx = useMemo(() => ({ anchor, totalWidth }), [anchor, totalWidth])
 

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -60,8 +60,7 @@ export function TaskBar({ task, left, width }: Props) {
     markDelayed: s.markDelayed,
   })))
 
-  const allProjects = useStore(s => s.projects)
-  const project = task.projectId ? allProjects.find(p => p.id === task.projectId) : null
+  const project = useStore(s => task.projectId ? s.projects.find(p => p.id === task.projectId) ?? null : null)
   const criticalTaskIds = useCriticalPath()
   const isCritical = criticalTaskIds.has(task.id)
 
@@ -112,7 +111,7 @@ export function TaskBar({ task, left, width }: Props) {
     setOpen(v => !v)
   }
 
-  const barColor = taskColor(task.id)
+  const barColor = useMemo(() => taskColor(task.id), [task.id])
   const meta = STATUS_META[task.status]
   const minWidth = width >= 60
 

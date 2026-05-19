@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { isToday } from 'date-fns'
 import { useStore } from '../../store'
 import { generateMultiPeriodColumns, TIMELINE_PERIODS } from '../../lib/ganttLayout'
@@ -8,7 +9,10 @@ export function GanttHeader() {
   const view = useStore(s => s.view)
   const { anchor, totalWidth } = useGanttTimeline()
   const { total: totalPeriods } = TIMELINE_PERIODS[view]
-  const columns = generateMultiPeriodColumns(view, anchor, totalPeriods)
+  const columns = useMemo(
+    () => generateMultiPeriodColumns(view, anchor, totalPeriods),
+    [view, anchor, totalPeriods]
+  )
 
   return (
     <div

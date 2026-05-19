@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Edit2, Trash2, Plus, ChevronDown, ChevronRight } from 'lucide-react'
 import { useStore } from '../../store'
 import { useShallow } from 'zustand/react/shallow'
@@ -21,7 +21,7 @@ export function PoolLabel({ pool, collapsed, onToggleCollapse }: Props) {
     activeClient: s.activeClient,
     clients: s.clients,
   })))
-  const client = clients.find(c => c.id === activeClient)
+  const client = useMemo(() => clients.find(c => c.id === activeClient), [clients, activeClient])
 
   const saveEdit = () => {
     if (name.trim()) updatePool(pool.id, name.trim())

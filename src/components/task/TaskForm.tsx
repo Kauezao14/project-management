@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Moon, Coffee, GitMerge } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
@@ -177,24 +177,28 @@ export function TaskForm() {
 
   // Tasks available as predecessors: same project, not the current task, grouped by pool
   const selectedProjectId = form.projectId as string
-  const candidateTasks = selectedProjectId
-    ? tasks.filter(t =>
-        t.projectId === selectedProjectId &&
-        t.id !== (task?.id ?? '')
-      )
-    : []
+  const taskId = task?.id ?? ''
+  const candidateTasks = useMemo(
+    () => selectedProjectId
+      ? tasks.filter(t => t.projectId === selectedProjectId && t.id !== taskId)
+      : [],
+    [selectedProjectId, tasks, taskId]
+  )
 
   // Group candidates by pool
-  const candidateByPool = candidateTasks.reduce<{ poolId: string; poolName: string; tasks: Task[] }[]>((acc, t) => {
-    const existing = acc.find(g => g.poolId === t.poolId)
-    const poolName = pools.find(p => p.id === t.poolId)?.name ?? t.poolId
-    if (existing) {
-      existing.tasks.push(t)
-    } else {
-      acc.push({ poolId: t.poolId, poolName, tasks: [t] })
-    }
-    return acc
-  }, [])
+  const candidateByPool = useMemo(
+    () => candidateTasks.reduce<{ poolId: string; poolName: string; tasks: Task[] }[]>((acc, t) => {
+      const existing = acc.find(g => g.poolId === t.poolId)
+      const poolName = pools.find(p => p.id === t.poolId)?.name ?? t.poolId
+      if (existing) {
+        existing.tasks.push(t)
+      } else {
+        acc.push({ poolId: t.poolId, poolName, tasks: [t] })
+      }
+      return acc
+    }, []),
+    [candidateTasks, pools]
+  )
 
   return (
     <Modal

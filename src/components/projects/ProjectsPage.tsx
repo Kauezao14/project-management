@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { format, parseISO, differenceInHours } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import {
@@ -140,8 +140,8 @@ function ProjectCard({ project }: { project: Project }) {
   const [editing, setEditing] = useState(false)
   const [expanded, setExpanded] = useState(true)
 
-  const projectTasks = allTasks.filter(t => t.projectId === project.id)
-  const pathInfo = computeProjectPath(project.id, allTasks)
+  const projectTasks = useMemo(() => allTasks.filter(t => t.projectId === project.id), [allTasks, project.id])
+  const pathInfo = useMemo(() => computeProjectPath(project.id, allTasks), [project.id, allTasks])
 
   const total = projectTasks.length
   const done = projectTasks.filter(t => t.status === 'completed').length
