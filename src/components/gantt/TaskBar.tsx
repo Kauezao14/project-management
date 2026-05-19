@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -10,34 +10,11 @@ import { useShallow } from 'zustand/react/shallow'
 import { useCriticalPath } from '../../contexts/CriticalPathContext'
 import type { Task } from '../../types/task'
 
-const TASK_PALETTE = [
-  '#3b82f6',
-  '#8b5cf6',
-  '#f59e0b',
-  '#10b981',
-  '#ec4899',
-  '#06b6d4',
-  '#f97316',
-  '#6366f1',
-  '#14b8a6',
-  '#a855f7',
-  '#84cc16',
-  '#ef4444',
-]
-
-function taskColor(id: string): string {
-  let hash = 0
-  for (let i = 0; i < id.length; i++) {
-    hash = (hash * 31 + id.charCodeAt(i)) >>> 0
-  }
-  return TASK_PALETTE[hash % (TASK_PALETTE.length - 1)]
-}
-
 const STATUS_META = {
-  pending:     { label: 'Pendente',      opacity: 1,    borderColor: null },
-  in_progress: { label: 'Em andamento',  opacity: 1,    borderColor: '#fbbf24' },
-  completed:   { label: 'Concluído',     opacity: 0.55, borderColor: '#34d399' },
-  delayed:     { label: 'Atrasado',      opacity: 1,    borderColor: '#ef4444' },
+  pending:     { label: 'Pendente',      opacity: 1,    statusColor: '#6b7280' },
+  in_progress: { label: 'Em andamento',  opacity: 1,    statusColor: '#f59e0b' },
+  completed:   { label: 'Concluído',     opacity: 0.55, statusColor: '#10b981' },
+  delayed:     { label: 'Atrasado',      opacity: 1,    statusColor: '#ef4444' },
 }
 
 interface Props {
@@ -63,6 +40,9 @@ export function TaskBar({ task, left, width }: Props) {
   const project = useStore(s => task.projectId ? s.projects.find(p => p.id === task.projectId) ?? null : null)
   const criticalTaskIds = useCriticalPath()
   const isCritical = criticalTaskIds.has(task.id)
+
+  // Accent = project color; fallback neutral for unassigned tasks
+  const accentColor = project?.color ?? '#94a3b8'
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
@@ -111,7 +91,6 @@ export function TaskBar({ task, left, width }: Props) {
     setOpen(v => !v)
   }
 
-  const barColor = useMemo(() => taskColor(task.id), [task.id])
   const meta = STATUS_META[task.status]
   const minWidth = width >= 60
 
@@ -121,8 +100,6 @@ export function TaskBar({ task, left, width }: Props) {
     width,
     top: 6,
     height: 36,
-    // While dragging: stay in place (DragOverlay handles the moving visual).
-    // Applying dnd-kit's translate to absolutely-positioned bars distorts widths.
     transform: isDragging ? undefined : CSS.Transform.toString(transform),
     transition: isDragging ? undefined : transition,
     zIndex: isDragging ? 2 : open ? 10 : 1,
@@ -142,50 +119,43 @@ export function TaskBar({ task, left, width }: Props) {
         <div
           className="w-full h-full rounded-md flex items-center px-2 gap-1.5 overflow-hidden relative"
           style={{
-            backgroundColor: barColor,
-            boxShadow: meta.borderColor
-              ? `inset 3px 0 0 0 ${meta.borderColor}, 0 1px 3px rgba(0,0,0,0.25)`
-              : '0 1px 3px rgba(0,0,0,0.2)',
-            outline: open ? '2px solid rgba(255,255,255,0.6)' : '1px solid rgba(0,0,0,0.15)',
+            backgroundColor: `${accentColor}18`,
+            boxShadow: `inset 4px 0 0 0 ${accentColor}`,
+            border: `1px solid ${accentColor}55`,
+            outline: open ? `2px solid ${accentColor}` : 'none',
+            outlineOffset: '1px',
           }}
         >
-          {task.status === 'delayed'     && <AlertTriangle size={11} className="shrink-0 text-white" />}
-          {task.status === 'completed'   && <CheckCircle   size={11} className="shrink-0 text-white" />}
-          {task.status === 'in_progress' && <PlayCircle    size={11} className="shrink-0 text-white" />}
+          {task.status === 'delayed'     && <AlertTriangle size={11} className="shrink-0" style={{ color: '#ef4444' }} />}
+          {task.status === 'completed'   && <CheckCircle   size={11} className="shrink-0" style={{ color: '#10b981' }} />}
+          {task.status === 'in_progress' && <PlayCircle    size={11} className="shrink-0" style={{ color: '#f59e0b' }} />}
 
           {minWidth && (
-            <span className="text-xs text-white font-semibold truncate leading-none drop-shadow-sm">
+            <span className="text-xs font-semibold truncate leading-none" style={{ color: '#1e293b' }}>
               {task.title}
             </span>
           )}
 
           <div className="ml-auto flex items-center gap-0.5 shrink-0">
             {isCritical && (
-              <span title="Caminho crítico" className="text-yellow-300 drop-shadow-sm">
+              <span title="Caminho crítico" style={{ color: '#eab308' }}>
                 <Star size={10} fill="currentColor" />
               </span>
             )}
             {task.lunchWork && (
-              <span title="Trabalha no almoço" className="text-white/90">
+              <span title="Trabalha no almoço" style={{ color: accentColor }}>
                 <Coffee size={10} />
               </span>
             )}
             {task.overtime && (
-              <span title={`Hora extra (+${task.overtimeHours ?? '?'}h)`} className="text-white/90">
+              <span title={`Hora extra (+${task.overtimeHours ?? '?'}h)`} style={{ color: accentColor }}>
                 <Moon size={10} />
               </span>
             )}
             {task.status === 'delayed' && minWidth && (
-              <span className="text-xs font-bold text-white/90 bg-red-600/70 px-1 rounded ml-1">
+              <span className="text-xs font-bold px-1 rounded ml-1" style={{ color: '#dc2626', backgroundColor: '#fef2f2' }}>
                 Atrasado
               </span>
-            )}
-            {project && (
-              <span
-                title={`Projeto: ${project.name}`}
-                className="w-2 h-2 rounded-full shrink-0 ring-1 ring-white/50"
-                style={{ backgroundColor: project.color }}
-              />
             )}
           </div>
 
@@ -193,7 +163,7 @@ export function TaskBar({ task, left, width }: Props) {
             <div
               className="absolute inset-0 rounded-md pointer-events-none"
               style={{
-                backgroundImage: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.1) 0px, rgba(255,255,255,0.1) 2px, transparent 2px, transparent 8px)',
+                backgroundImage: 'repeating-linear-gradient(45deg, rgba(0,0,0,0.06) 0px, rgba(0,0,0,0.06) 2px, transparent 2px, transparent 8px)',
               }}
             />
           )}
@@ -209,7 +179,7 @@ export function TaskBar({ task, left, width }: Props) {
         >
           {/* Header */}
           <div className="flex items-center gap-2 mb-2">
-            <span className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: barColor }} />
+            <span className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: accentColor }} />
             <span className="font-semibold text-sm flex-1 truncate">{task.title}</span>
             {isCritical && <Star size={12} className="text-yellow-400 shrink-0" fill="currentColor" />}
           </div>
@@ -227,7 +197,7 @@ export function TaskBar({ task, left, width }: Props) {
               <span
                 className="text-xs font-medium px-1.5 py-0.5 rounded"
                 style={{
-                  backgroundColor: meta.borderColor ?? '#6b7280',
+                  backgroundColor: meta.statusColor,
                   color: 'white',
                 }}
               >
