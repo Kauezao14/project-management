@@ -27,6 +27,20 @@ import type { Task } from '../types/task'
 import type { Project } from '../types/project'
 import type { View } from '../types/app'
 
+// Undo history — kept outside Zustand to avoid triggering selectors
+type Snapshot = { tasks: Task[]; pools: Pool[]; projects: Project[] }
+const undoStack: Snapshot[] = []
+const MAX_UNDO = 20
+
+function snapshot(s: { tasks: Task[]; pools: Pool[]; projects: Project[] }): void {
+  undoStack.push({
+    tasks: JSON.parse(JSON.stringify(s.tasks)),
+    pools: JSON.parse(JSON.stringify(s.pools)),
+    projects: JSON.parse(JSON.stringify(s.projects)),
+  })
+  if (undoStack.length > MAX_UNDO) undoStack.shift()
+}
+
 const savedView = (localStorage.getItem('gantt_view') as View | null) ?? 'weekly'
 const savedViewportStart = localStorage.getItem('gantt_viewport')
   ?? getViewportStart(savedView, new Date()).toISOString()
@@ -84,6 +98,7 @@ interface AppState {
   markInProgress: (taskId: string) => void
   checkAndPropagateDelays: () => void
   migratePinScheduledStarts: () => void
+  undo: () => void
 }
 
 export const useStore = create<AppState>()(
@@ -242,6 +257,7 @@ export const useStore = create<AppState>()(
     setAddingTaskToPool: (id) => set(s => { s.addingTaskToPoolId = id }),
 
     addTask: (poolId, data) => {
+      snapshot(get())
       set(s => {
         const pool = s.pools.find(p => p.id === poolId)
         if (!pool) return
@@ -263,18 +279,27 @@ export const useStore = create<AppState>()(
     },
 
     updateTask: (id, data) => {
+      snapshot(get())
       const poolId = get().tasks.find(t => t.id === id)?.poolId
+      const scheduleFields = new Set(['durationHours', 'overtime', 'overtimeHours', 'lunchWork', 'predecessors', 'projectId', 'pinnedStart'])
+      const needsReschedule = Object.keys(data).some(k => scheduleFields.has(k))
       set(s => {
         const task = s.tasks.find(t => t.id === id)
         if (!task) return
         Object.assign(task, data)
-        rescheduleAll(s.tasks, s.pools, s.clients, s.projects)
+        if (needsReschedule) rescheduleAll(s.tasks, s.pools, s.clients, s.projects)
       })
       markLocalWrite()
-      if (poolId) upsertTasks(get().tasks.filter(t => t.poolId === poolId)).catch(console.error)
+      if (needsReschedule && poolId) {
+        upsertTasks(get().tasks.filter(t => t.poolId === poolId)).catch(console.error)
+      } else {
+        const task = get().tasks.find(t => t.id === id)
+        if (task) upsertTasks([task]).catch(console.error)
+      }
     },
 
     deleteTask: (id) => {
+      snapshot(get())
       const poolId = get().tasks.find(t => t.id === id)?.poolId
       set(s => {
         s.tasks = s.tasks.filter(t => t.id !== id)
@@ -293,20 +318,33 @@ export const useStore = create<AppState>()(
     },
 
     moveTask: (taskId, toPoolId, toIndex) => {
+      snapshot(get())
       const fromPoolId = get().tasks.find(t => t.id === taskId)?.poolId
       set(s => {
         const task = s.tasks.find(t => t.id === taskId)
         if (!task) return
         const targetPool = s.pools.find(p => p.id === toPoolId)
         if (!targetPool) return
-        s.tasks.filter(t => t.poolId === task.poolId && t.id !== taskId)
-          .sort((a, b) => a.order - b.order).forEach((t, i) => { t.order = i })
-        const targetTasks = s.tasks.filter(t => t.poolId === toPoolId && t.id !== taskId)
-          .sort((a, b) => a.order - b.order)
-        targetTasks.splice(toIndex, 0, task)
-        targetTasks.forEach((t, i) => { t.order = i })
-        task.poolId = toPoolId
-        task.clientId = targetPool.clientId
+
+        if (task.poolId === toPoolId) {
+          // Same-pool: remove task, then insert at target index
+          const sorted = s.tasks.filter(t => t.poolId === toPoolId).sort((a, b) => a.order - b.order)
+          const fromIdx = sorted.findIndex(t => t.id === taskId)
+          sorted.splice(fromIdx, 1)
+          sorted.splice(Math.min(toIndex, sorted.length), 0, task)
+          sorted.forEach((t, i) => { t.order = i })
+        } else {
+          // Cross-pool: renumber source, insert into target
+          s.tasks.filter(t => t.poolId === task.poolId && t.id !== taskId)
+            .sort((a, b) => a.order - b.order).forEach((t, i) => { t.order = i })
+          const targetTasks = s.tasks.filter(t => t.poolId === toPoolId && t.id !== taskId)
+            .sort((a, b) => a.order - b.order)
+          targetTasks.splice(Math.min(toIndex, targetTasks.length), 0, task)
+          targetTasks.forEach((t, i) => { t.order = i })
+          task.poolId = toPoolId
+          task.clientId = targetPool.clientId
+        }
+
         rescheduleAll(s.tasks, s.pools, s.clients, s.projects)
       })
       markLocalWrite()
@@ -318,6 +356,7 @@ export const useStore = create<AppState>()(
     setEditingTask: (id) => set(s => { s.editingTaskId = id }),
 
     markDelayed: (taskId, actualEnd) => {
+      snapshot(get())
       set(s => {
         const task = s.tasks.find(t => t.id === taskId)
         if (!task) return
@@ -331,6 +370,7 @@ export const useStore = create<AppState>()(
     },
 
     markCompleted: (taskId) => {
+      snapshot(get())
       set(s => {
         const task = s.tasks.find(t => t.id === taskId)
         if (task) { task.status = 'completed'; task.actualEnd = task.actualEnd ?? new Date().toISOString() }
@@ -341,6 +381,7 @@ export const useStore = create<AppState>()(
     },
 
     markInProgress: (taskId) => {
+      snapshot(get())
       set(s => { const task = s.tasks.find(t => t.id === taskId); if (task) task.status = 'in_progress' })
       markLocalWrite()
       const task = get().tasks.find(t => t.id === taskId)
@@ -362,6 +403,18 @@ export const useStore = create<AppState>()(
         markLocalWrite()
         upsertTasks(get().tasks.filter(t => changedIds.includes(t.id))).catch(console.error)
       }
+    },
+
+    undo: () => {
+      const prev = undoStack.pop()
+      if (!prev) return
+      set(s => {
+        s.tasks = prev.tasks
+        s.pools = prev.pools
+        s.projects = prev.projects
+      })
+      markLocalWrite()
+      upsertTasks(get().tasks).catch(console.error)
     },
 
     migratePinScheduledStarts: () => {

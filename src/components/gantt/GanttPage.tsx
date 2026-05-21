@@ -18,6 +18,19 @@ import {
 export function GanttPage() {
   const scrollRef = useRef<HTMLDivElement>(null)
 
+  const undo = useStore(s => s.undo)
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        undo()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [undo])
+
   const { view, viewportStart, setViewportStart, editingTaskId, addingTaskToPoolId } = useStore(
     useShallow(s => ({
       view: s.view,

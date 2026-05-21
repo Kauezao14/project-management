@@ -1,6 +1,7 @@
-import { differenceInMinutes, getDaysInMonth, startOfDay, startOfWeek, startOfMonth, addDays, addWeeks, addMonths } from 'date-fns'
+import { differenceInMinutes, getDaysInMonth, getDay, startOfDay, startOfWeek, startOfMonth, addDays, addWeeks, addMonths, parseISO } from 'date-fns'
 import { HOUR_PX, DAY_PX, DAY_PX_MONTH } from '../config/constants'
 import type { View } from '../types/app'
+import type { WorkCalendar } from '../types/client'
 
 export interface TimelineColumn {
   key: string
@@ -107,6 +108,65 @@ export function generateTimelineColumns(view: View, periodStart: Date): Timeline
     }
   }
   return cols
+}
+
+/**
+ * Returns the visual segments (left+width in px) of a task bar, skipping
+ * non-work days and optionally the lunch break.
+ * Each segment is one contiguous work block within the scheduledStart→scheduledEnd range.
+ */
+export function getWorkSegments(
+  scheduledStart: string,
+  scheduledEnd: string,
+  workCalendar: WorkCalendar,
+  skipLunch: boolean,
+  effectiveEndHour: number,
+  anchor: Date,
+  view: View,
+): Array<{ left: number; width: number }> {
+  const start = parseISO(scheduledStart)
+  const end = parseISO(scheduledEnd)
+  const { workDays, startHour, lunchStart, lunchEnd } = workCalendar
+
+  const segments: Array<{ left: number; width: number }> = []
+
+  const pushSeg = (a: Date, b: Date) => {
+    if (a >= b) return
+    const w = calcWidth(a.toISOString(), b.toISOString(), view)
+    if (w >= 0.5) segments.push({ left: calcLeft(a.toISOString(), anchor, view), width: Math.max(w, 4) })
+  }
+
+  let day = startOfDay(start)
+  const lastDay = startOfDay(end)
+
+  while (day <= lastDay) {
+    if (workDays.includes(getDay(day))) {
+      const ws = new Date(day); ws.setHours(startHour, 0, 0, 0)
+      const we = new Date(day); we.setHours(effectiveEndHour, 0, 0, 0)
+      const segS = start > ws ? start : ws
+      const segE = end < we ? end : we
+
+      if (segS < segE) {
+        if (skipLunch && lunchStart !== undefined && lunchEnd !== undefined) {
+          const ls = new Date(day); ls.setHours(lunchStart, 0, 0, 0)
+          const le = new Date(day); le.setHours(lunchEnd, 0, 0, 0)
+          // Before lunch
+          pushSeg(segS, segS < ls ? (segE < ls ? segE : ls) : segS)
+          // After lunch
+          if (segE > le) pushSeg(segS > le ? segS : le, segE)
+        } else {
+          pushSeg(segS, segE)
+        }
+      }
+    }
+    day = addDays(day, 1)
+  }
+
+  if (segments.length === 0) {
+    // Fallback: task entirely on non-work time — show minimal bar at start
+    return [{ left: calcLeft(scheduledStart, anchor, view), width: 4 }]
+  }
+  return segments
 }
 
 /** Columns spanning multiple periods — keys are unique across periods */

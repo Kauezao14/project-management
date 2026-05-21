@@ -84,7 +84,9 @@ export function GanttBody() {
       const overTask = tasks.find(t => t.id === overId)
       if (!overTask) return
       targetPoolId = overTask.poolId
-      targetIndex = overTask.order
+      // Use array position, not .order value — avoids index shift bugs on same-pool moves
+      const sorted = tasks.filter(t => t.poolId === overTask.poolId).sort((a, b) => a.order - b.order)
+      targetIndex = sorted.findIndex(t => t.id === overId)
     }
 
     moveTask(activeId, targetPoolId, targetIndex)
