@@ -39,6 +39,7 @@ export function GanttBody() {
   const allTasks = useStore(s => s.tasks)
   const moveTask = useStore(s => s.moveTask)
   const checkAndPropagateDelays = useStore(s => s.checkAndPropagateDelays)
+  const migratePinScheduledStarts = useStore(s => s.migratePinScheduledStarts)
 
   const criticalTaskIds = useMemo(
     () => computeAllCriticalTaskIds(allTasks),
@@ -48,6 +49,7 @@ export function GanttBody() {
   const [draggingId, setDraggingId] = useState<string | null>(null)
 
   useEffect(() => {
+    migratePinScheduledStarts()
     checkAndPropagateDelays()
   }, []) // run once on mount
 

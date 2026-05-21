@@ -83,6 +83,7 @@ interface AppState {
   markCompleted: (taskId: string) => void
   markInProgress: (taskId: string) => void
   checkAndPropagateDelays: () => void
+  migratePinScheduledStarts: () => void
 }
 
 export const useStore = create<AppState>()(
@@ -361,6 +362,19 @@ export const useStore = create<AppState>()(
         markLocalWrite()
         upsertTasks(get().tasks.filter(t => changedIds.includes(t.id))).catch(console.error)
       }
+    },
+
+    migratePinScheduledStarts: () => {
+      const FLAG = 'gantt_pin_migration_v1'
+      if (localStorage.getItem(FLAG)) return
+      const toPin = get().tasks.filter(t => !t.pinnedStart && t.status !== 'completed')
+      if (toPin.length > 0) {
+        const ids = new Set(toPin.map(t => t.id))
+        set(s => { s.tasks.forEach(t => { if (ids.has(t.id)) t.pinnedStart = t.scheduledStart }) })
+        markLocalWrite()
+        upsertTasks(get().tasks.filter(t => ids.has(t.id))).catch(console.error)
+      }
+      localStorage.setItem(FLAG, '1')
     },
   }))
 )
