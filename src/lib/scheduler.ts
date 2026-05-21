@@ -64,14 +64,22 @@ export function rescheduleAll(tasks: Task[], pools: Pool[], clients: ClientConfi
       const cal = client.workCalendar
       const effectiveCal = getEffectiveCalendar(cal, task)
 
-      // Início = máximo entre (floor do projeto ou agora), pinnedStart e (fim de cada dependência)
+      // Início = máximo entre floor e fim de cada dependência
       const proj = task.projectId ? projectMap.get(task.projectId) : undefined
-      const floorDate = proj?.startDate ? parseISO(proj.startDate) : now
-      let start = snapToWorkStart(floorDate, cal)
+
+      let start: Date
       if (task.pinnedStart) {
-        const pinned = snapToWorkStart(parseISO(task.pinnedStart), cal)
-        if (pinned > start) start = pinned
+        // pinnedStart escolhido pelo usuário — não aplica "now" como piso
+        start = snapToWorkStart(parseISO(task.pinnedStart), cal)
+        if (proj?.startDate) {
+          const projSnap = snapToWorkStart(parseISO(proj.startDate), cal)
+          if (projSnap > start) start = projSnap
+        }
+      } else {
+        const floorDate = proj?.startDate ? parseISO(proj.startDate) : now
+        start = snapToWorkStart(floorDate, cal)
       }
+
       for (const depId of deps) {
         const dep = taskMap.get(depId)!
         const depEnd = snapToWorkStart(effectiveEnd(dep), cal)
