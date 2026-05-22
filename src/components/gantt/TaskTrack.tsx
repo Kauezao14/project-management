@@ -56,7 +56,7 @@ export function TaskTrack({ poolId }: Props) {
       const segments = workCalendar
         ? getWorkSegments(
             task.scheduledStart, task.scheduledEnd,
-            workCalendar, !task.lunchWork, effectiveEndHour,
+            workCalendar, effectiveEndHour,
             anchor, view,
           )
         : [{ left: calcLeft(task.scheduledStart, anchor, view), width: 4 }]

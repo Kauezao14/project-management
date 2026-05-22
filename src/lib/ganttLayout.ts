@@ -111,30 +111,23 @@ export function generateTimelineColumns(view: View, periodStart: Date): Timeline
 }
 
 /**
- * Returns the visual segments (left+width in px) of a task bar, skipping
- * non-work days and optionally the lunch break.
- * Each segment is one contiguous work block within the scheduledStart→scheduledEnd range.
+ * Returns the visual segments (left+width in px) of a task bar, one segment
+ * per contiguous work day within the scheduledStart→scheduledEnd range.
+ * Non-work days (weekends, etc.) produce no segment — the bar "jumps" over them.
  */
 export function getWorkSegments(
   scheduledStart: string,
   scheduledEnd: string,
   workCalendar: WorkCalendar,
-  skipLunch: boolean,
   effectiveEndHour: number,
   anchor: Date,
   view: View,
 ): Array<{ left: number; width: number }> {
   const start = parseISO(scheduledStart)
   const end = parseISO(scheduledEnd)
-  const { workDays, startHour, lunchStart, lunchEnd } = workCalendar
+  const { workDays, startHour } = workCalendar
 
   const segments: Array<{ left: number; width: number }> = []
-
-  const pushSeg = (a: Date, b: Date) => {
-    if (a >= b) return
-    const w = calcWidth(a.toISOString(), b.toISOString(), view)
-    if (w >= 0.5) segments.push({ left: calcLeft(a.toISOString(), anchor, view), width: Math.max(w, 4) })
-  }
 
   let day = startOfDay(start)
   const lastDay = startOfDay(end)
@@ -147,23 +140,14 @@ export function getWorkSegments(
       const segE = end < we ? end : we
 
       if (segS < segE) {
-        if (skipLunch && lunchStart !== undefined && lunchEnd !== undefined) {
-          const ls = new Date(day); ls.setHours(lunchStart, 0, 0, 0)
-          const le = new Date(day); le.setHours(lunchEnd, 0, 0, 0)
-          // Before lunch
-          pushSeg(segS, segS < ls ? (segE < ls ? segE : ls) : segS)
-          // After lunch
-          if (segE > le) pushSeg(segS > le ? segS : le, segE)
-        } else {
-          pushSeg(segS, segE)
-        }
+        const w = calcWidth(segS.toISOString(), segE.toISOString(), view)
+        if (w >= 0.5) segments.push({ left: calcLeft(segS.toISOString(), anchor, view), width: Math.max(w, 4) })
       }
     }
     day = addDays(day, 1)
   }
 
   if (segments.length === 0) {
-    // Fallback: task entirely on non-work time — show minimal bar at start
     return [{ left: calcLeft(scheduledStart, anchor, view), width: 4 }]
   }
   return segments
