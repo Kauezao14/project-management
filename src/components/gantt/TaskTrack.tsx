@@ -42,7 +42,8 @@ export function TaskTrack({ poolId }: Props) {
   const taskLayouts = useMemo(() => {
     return tasks.map((task) => {
       const left = calcLeft(task.scheduledStart, anchor, view)
-      const width = Math.max(calcWidth(task.scheduledStart, task.scheduledEnd, view), 4)
+      const barEnd = task.actualEnd ?? task.scheduledEnd
+      const width = Math.max(calcWidth(task.scheduledStart, barEnd, view), 4)
       const accentColor = (task.projectId && projectColors[task.projectId]) ?? '#94a3b8'
       return { task, left, width, accentColor }
     })

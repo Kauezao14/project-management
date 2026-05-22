@@ -58,6 +58,9 @@ export function rescheduleAll(tasks: Task[], pools: Pool[], clients: ClientConfi
       const deps = getDeps(task)
       if (!deps.every(d => scheduled.has(d))) continue
 
+      // Completed tasks keep their historical scheduledStart/End unchanged
+      if (task.status === 'completed') { scheduled.add(id); remaining.delete(id); progress = true; continue }
+
       const client = clientMap.get(task.clientId)
       if (!client) { scheduled.add(id); remaining.delete(id); continue }
 
