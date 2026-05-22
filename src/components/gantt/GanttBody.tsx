@@ -42,6 +42,7 @@ export function GanttBody() {
   const moveTask = useStore(s => s.moveTask)
   const checkAndPropagateDelays = useStore(s => s.checkAndPropagateDelays)
   const migratePinScheduledStarts = useStore(s => s.migratePinScheduledStarts)
+  const fixCorruptedCompletedTasks = useStore(s => s.fixCorruptedCompletedTasks)
 
   const criticalTaskIds = useMemo(
     () => computeAllCriticalTaskIds(allTasks),
@@ -52,6 +53,7 @@ export function GanttBody() {
   const [dragPreview, setDragPreview] = useState<DragPreviewState>(EMPTY_PREVIEW)
 
   useEffect(() => {
+    fixCorruptedCompletedTasks()
     migratePinScheduledStarts()
     checkAndPropagateDelays()
   }, []) // run once on mount
