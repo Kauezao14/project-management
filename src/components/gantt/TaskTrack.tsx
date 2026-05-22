@@ -70,12 +70,17 @@ export function TaskTrack({ poolId }: Props) {
     [view, timelineAnchor, totalPeriods]
   )
 
-  // Compute base layouts
+  // Compute base layouts — ensure no two bars in the same pool visually overlap.
+  // When a bar's minimum display width (4px) exceeds its actual time width, the
+  // next bar starts where the previous one visually ends, not at its raw pixel pos.
   const taskLayouts = useMemo(() => {
+    let minLeft = -Infinity
     return tasks.map((task) => {
       const barEnd = task.actualEnd ?? task.scheduledEnd
-      const left = calcLeft(task.scheduledStart, timelineAnchor, view)
+      const rawLeft = calcLeft(task.scheduledStart, timelineAnchor, view)
       const width = Math.max(calcWidth(task.scheduledStart, barEnd, view), 4)
+      const left = Math.max(rawLeft, minLeft)
+      minLeft = left + width
       const accentColor = (task.projectId && projectColors[task.projectId]) ?? '#94a3b8'
       return { task, left, width, accentColor }
     })
