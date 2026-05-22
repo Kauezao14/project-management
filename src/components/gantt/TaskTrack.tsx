@@ -16,23 +16,30 @@ interface Props {
 
 const noopStrategy = () => null
 
-/** Compute sequential preview positions for tasks in hypothetical order */
-function computePreview(
-  orderedTasks: Task[],
-  queueStart: Date,
-  timelineAnchor: Date,
-  view: Parameters<typeof calcLeft>[2],
-): Map<string, { left: number; width: number; origLeft: number }> {
-  const result = new Map<string, { left: number; width: number; origLeft: number }>()
-  let cursor = queueStart.getTime()
-  for (const t of orderedTasks) {
-    const dur = new Date(t.scheduledEnd).getTime() - new Date(t.scheduledStart).getTime()
-    const left = calcLeft(new Date(cursor).toISOString(), timelineAnchor, view)
-    const origLeft = calcLeft(t.scheduledStart, timelineAnchor, view)
-    const end = cursor + dur
-    const width = Math.max(calcWidth(new Date(cursor).toISOString(), new Date(end).toISOString(), view), 4)
-    result.set(t.id, { left, width, origLeft })
-    cursor = end
+/** Returns which direction each task would shift if the drag were completed */
+function computeDirections(
+  tasks: Task[],
+  draggingId: string,
+  draggingTask: Task,
+  _isSourcePool: boolean,
+  isTargetPool: boolean,
+  overIndex: number,
+): Map<string, 'forward' | 'backward'> {
+  const currentIdx = new Map(tasks.map((t, i) => [t.id, i]))
+  let hypo = tasks.filter(t => t.id !== draggingId)
+  if (isTargetPool && overIndex >= 0) {
+    const at = Math.min(overIndex, hypo.length)
+    hypo = [...hypo.slice(0, at), draggingTask, ...hypo.slice(at)]
+  }
+  const newIdx = new Map(hypo.map((t, i) => [t.id, i]))
+
+  const result = new Map<string, 'forward' | 'backward'>()
+  for (const t of tasks) {
+    if (t.id === draggingId) continue
+    const oi = currentIdx.get(t.id) ?? 0
+    const ni = newIdx.get(t.id) ?? oi
+    if (ni > oi) result.set(t.id, 'forward')
+    else if (ni < oi) result.set(t.id, 'backward')
   }
   return result
 }
@@ -74,29 +81,19 @@ export function TaskTrack({ poolId }: Props) {
     })
   }, [tasks, timelineAnchor, view, projectColors])
 
-  // Preview layout while dragging — recomputed only when drag state changes
-  const previewMap = useMemo<Map<string, { left: number; width: number; origLeft: number }> | null>(() => {
+  // Direction arrows while dragging — which tasks shift forward or backward
+  const directionMap = useMemo<Map<string, 'forward' | 'backward'> | null>(() => {
     if (!draggingId) return null
 
     const isSourcePool = tasks.some(t => t.id === draggingId)
     const isTargetPool = overPoolId === poolId
     if (!isSourcePool && !isTargetPool) return null
 
-    const allTasks = useStore.getState().tasks
-    const draggingTask = allTasks.find(t => t.id === draggingId)
+    const draggingTask = useStore.getState().tasks.find(t => t.id === draggingId)
     if (!draggingTask) return null
 
-    // Build hypothetical order for this pool
-    let hypo: Task[] = tasks.filter(t => t.id !== draggingId)
-    if (isTargetPool && overIndex >= 0) {
-      const at = Math.min(overIndex, hypo.length)
-      hypo = [...hypo.slice(0, at), draggingTask, ...hypo.slice(at)]
-    }
-
-    // Queue starts at the first task's current scheduledStart
-    const queueStart = tasks[0] ? new Date(tasks[0].scheduledStart) : new Date()
-    return computePreview(hypo, queueStart, timelineAnchor, view)
-  }, [draggingId, overPoolId, overIndex, tasks, timelineAnchor, view, poolId])
+    return computeDirections(tasks, draggingId, draggingTask, isSourcePool, isTargetPool, overIndex)
+  }, [draggingId, overPoolId, overIndex, tasks, poolId])
 
   const nowLeft = useMemo(
     () => calcLeft(new Date().toISOString(), timelineAnchor, view),
@@ -129,29 +126,19 @@ export function TaskTrack({ poolId }: Props) {
       <div ref={setNodeRef} className="relative h-full" style={{ width: totalWidth }}>
         <SortableContext items={tasks.map(t => t.id)} strategy={noopStrategy}>
           {taskLayouts.map(({ task, left, width }) => {
-            const preview = previewMap?.get(task.id)
             const isDraggingThis = task.id === draggingId
-
-            // During drag: use preview position for non-dragged tasks
-            const displayLeft = preview && !isDraggingThis ? preview.left : left
-            const displayWidth = preview && !isDraggingThis ? preview.width : width
-
-            // Direction badge: compare preview position to original
-            let dragDirection: 'forward' | 'backward' | null = null
-            if (preview && !isDraggingThis && isDragActive) {
-              const delta = preview.left - preview.origLeft
-              if (delta > 3) dragDirection = 'forward'
-              else if (delta < -3) dragDirection = 'backward'
-            }
+            const dragDirection = isDragActive && !isDraggingThis
+              ? (directionMap?.get(task.id) ?? null)
+              : null
 
             return (
               <TaskBar
                 key={task.id}
                 task={task}
-                left={displayLeft}
-                width={displayWidth}
+                left={left}
+                width={width}
                 dragDirection={dragDirection}
-                style={isDraggingThis ? { opacity: 0.25 } : isDragActive && preview ? { opacity: 0.85, transition: 'left 120ms ease' } : undefined}
+                style={isDraggingThis ? { opacity: 0.25 } : undefined}
               />
             )
           })}
