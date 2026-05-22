@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -9,23 +9,25 @@ import {
   pointerWithin,
   type DragEndEvent,
   type DragStartEvent,
+  type DragOverEvent,
   type CollisionDetection,
 } from '@dnd-kit/core'
 import { useStore } from '../../store'
 import { useShallow } from 'zustand/react/shallow'
 import { GanttRow } from './GanttRow'
 import { CriticalPathContext } from '../../contexts/CriticalPathContext'
+import { DragPreviewContext, type DragPreviewState } from '../../contexts/DragPreviewContext'
 import { computeAllCriticalTaskIds } from '../../lib/criticalPath'
 
-// Prefer pointerWithin for large drop zones (empty pools); fall back to closestCenter for task reordering
 const collisionDetection: CollisionDetection = (args) => {
   const within = pointerWithin(args)
   if (within.length > 0) return within
   return closestCenter(args)
 }
 
+const EMPTY_PREVIEW: DragPreviewState = { draggingId: null, overPoolId: null, overIndex: -1 }
+
 export function GanttBody() {
-  // Filtered + sorted pool list — only re-renders when pools for this client change
   const pools = useStore(
     useShallow(s =>
       s.pools
@@ -47,6 +49,7 @@ export function GanttBody() {
   )
 
   const [draggingId, setDraggingId] = useState<string | null>(null)
+  const [dragPreview, setDragPreview] = useState<DragPreviewState>(EMPTY_PREVIEW)
 
   useEffect(() => {
     migratePinScheduledStarts()
@@ -57,12 +60,46 @@ export function GanttBody() {
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   )
 
-  const handleDragStart = ({ active }: DragStartEvent) => {
-    setDraggingId(String(active.id))
-  }
+  const handleDragStart = useCallback(({ active }: DragStartEvent) => {
+    const id = String(active.id)
+    setDraggingId(id)
+    const tasks = useStore.getState().tasks
+    const task = tasks.find(t => t.id === id)
+    if (!task) return
+    const sorted = tasks.filter(t => t.poolId === task.poolId).sort((a, b) => a.order - b.order)
+    setDragPreview({ draggingId: id, overPoolId: task.poolId, overIndex: sorted.findIndex(t => t.id === id) })
+  }, [])
 
-  const handleDragEnd = ({ active, over }: DragEndEvent) => {
+  const handleDragOver = useCallback(({ active, over }: DragOverEvent) => {
+    if (!over) return
+    const activeId = String(active.id)
+    const overId = String(over.id)
+    const tasks = useStore.getState().tasks
+
+    let overPoolId: string
+    let overIndex: number
+
+    if (overId.startsWith('pool-drop-')) {
+      overPoolId = overId.replace('pool-drop-', '')
+      overIndex = tasks.filter(t => t.poolId === overPoolId).length
+    } else {
+      const overTask = tasks.find(t => t.id === overId)
+      if (!overTask) return
+      overPoolId = overTask.poolId
+      const sorted = tasks.filter(t => t.poolId === overPoolId).sort((a, b) => a.order - b.order)
+      overIndex = sorted.findIndex(t => t.id === overId)
+    }
+
+    setDragPreview(prev =>
+      prev.draggingId === activeId && prev.overPoolId === overPoolId && prev.overIndex === overIndex
+        ? prev
+        : { draggingId: activeId, overPoolId, overIndex }
+    )
+  }, [])
+
+  const handleDragEnd = useCallback(({ active, over }: DragEndEvent) => {
     setDraggingId(null)
+    setDragPreview(EMPTY_PREVIEW)
     if (!over) return
 
     const activeId = String(active.id)
@@ -76,21 +113,18 @@ export function GanttBody() {
 
     if (overId.startsWith('pool-drop-')) {
       targetPoolId = overId.replace('pool-drop-', '')
-      const poolTasks = tasks
-        .filter(t => t.poolId === targetPoolId)
-        .sort((a, b) => a.order - b.order)
+      const poolTasks = tasks.filter(t => t.poolId === targetPoolId).sort((a, b) => a.order - b.order)
       targetIndex = poolTasks.length
     } else {
       const overTask = tasks.find(t => t.id === overId)
       if (!overTask) return
       targetPoolId = overTask.poolId
-      // Use array position, not .order value — avoids index shift bugs on same-pool moves
       const sorted = tasks.filter(t => t.poolId === overTask.poolId).sort((a, b) => a.order - b.order)
       targetIndex = sorted.findIndex(t => t.id === overId)
     }
 
     moveTask(activeId, targetPoolId, targetIndex)
-  }
+  }, [moveTask])
 
   if (pools.length === 0) {
     return (
@@ -108,29 +142,30 @@ export function GanttBody() {
     )
   }
 
-  const draggingTask = draggingId
-    ? useStore.getState().tasks.find(t => t.id === draggingId)
-    : null
+  const draggingTask = draggingId ? useStore.getState().tasks.find(t => t.id === draggingId) : null
 
   return (
     <CriticalPathContext.Provider value={criticalTaskIds}>
-      <DndContext
-        sensors={sensors}
-        collisionDetection={collisionDetection}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-      >
-        {pools.map(pool => (
-          <GanttRow key={pool.id} pool={pool} />
-        ))}
-        <DragOverlay dropAnimation={null}>
-          {draggingTask ? (
-            <div className="bg-blue-500 text-white text-xs px-3 py-1.5 rounded-md shadow-xl opacity-90 pointer-events-none whitespace-nowrap">
-              {draggingTask.title}
-            </div>
-          ) : null}
-        </DragOverlay>
-      </DndContext>
+      <DragPreviewContext.Provider value={dragPreview}>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={collisionDetection}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnd={handleDragEnd}
+        >
+          {pools.map(pool => (
+            <GanttRow key={pool.id} pool={pool} />
+          ))}
+          <DragOverlay dropAnimation={null}>
+            {draggingTask ? (
+              <div className="bg-blue-500 text-white text-xs px-3 py-1.5 rounded-md shadow-xl opacity-90 pointer-events-none whitespace-nowrap">
+                {draggingTask.title}
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
+      </DragPreviewContext.Provider>
     </CriticalPathContext.Provider>
   )
 }

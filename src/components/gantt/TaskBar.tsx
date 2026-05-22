@@ -21,9 +21,11 @@ interface Props {
   task: Task
   left: number
   width: number
+  dragDirection?: 'forward' | 'backward' | null
+  style?: React.CSSProperties
 }
 
-export function TaskBar({ task, left, width }: Props) {
+export function TaskBar({ task, left, width, dragDirection, style: extraStyle }: Props) {
   const [open, setOpen] = useState(false)
   const barRef = useRef<HTMLDivElement | null>(null)
   const popupRef = useRef<HTMLDivElement | null>(null)
@@ -94,8 +96,8 @@ export function TaskBar({ task, left, width }: Props) {
   const meta = STATUS_META[task.status]
   const minWidth = width >= 60
 
-  const barStyle = {
-    position: 'absolute' as const,
+  const barStyle: React.CSSProperties = {
+    position: 'absolute',
     left,
     width,
     top: 6,
@@ -104,6 +106,7 @@ export function TaskBar({ task, left, width }: Props) {
     transition: isDragging ? undefined : transition,
     zIndex: isDragging ? 2 : open ? 10 : 1,
     opacity: isDragging ? 0.35 : meta.opacity,
+    ...extraStyle,
   }
 
   return (
@@ -129,6 +132,8 @@ export function TaskBar({ task, left, width }: Props) {
           {task.status === 'delayed'     && <AlertTriangle size={11} className="shrink-0" style={{ color: '#ef4444' }} />}
           {task.status === 'completed'   && <CheckCircle   size={11} className="shrink-0" style={{ color: '#10b981' }} />}
           {task.status === 'in_progress' && <PlayCircle    size={11} className="shrink-0" style={{ color: '#f59e0b' }} />}
+          {dragDirection === 'forward'  && <span className="shrink-0 text-xs font-bold" style={{ color: '#f59e0b' }}>→</span>}
+          {dragDirection === 'backward' && <span className="shrink-0 text-xs font-bold" style={{ color: '#3b82f6' }}>←</span>}
 
           {minWidth && (
             <span className="text-xs font-semibold truncate leading-none" style={{ color: '#1e293b' }}>
