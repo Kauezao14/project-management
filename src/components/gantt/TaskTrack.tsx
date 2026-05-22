@@ -33,6 +33,8 @@ export function TaskTrack({ poolId }: Props) {
     })
   )
 
+  const setEditingTask = useStore(s => s.setEditingTask)
+
   // Project colors for extra segment rendering
   const projectColors = useStore(
     useShallow(s => Object.fromEntries(s.projects.map(p => [p.id, p.color])))
@@ -100,7 +102,8 @@ export function TaskTrack({ poolId }: Props) {
               {extraSegments.map((seg, i) => (
                 <div
                   key={i}
-                  className="absolute pointer-events-none"
+                  className="absolute cursor-pointer"
+                  onClick={() => setEditingTask(task.id)}
                   style={{
                     left: seg.left,
                     width: seg.width,
