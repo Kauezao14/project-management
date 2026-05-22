@@ -98,6 +98,7 @@ interface AppState {
   markInProgress: (taskId: string) => void
   checkAndPropagateDelays: () => void
   migratePinScheduledStarts: () => void
+  fixCorruptedCompletedTasks: () => void
   undo: () => void
 }
 
@@ -415,6 +416,35 @@ export const useStore = create<AppState>()(
       })
       markLocalWrite()
       upsertTasks(get().tasks).catch(console.error)
+    },
+
+    fixCorruptedCompletedTasks: () => {
+      const FLAG = 'gantt_completed_fix_v1'
+      if (localStorage.getItem(FLAG)) return
+      const corrupted: string[] = []
+      set(s => {
+        for (const task of s.tasks) {
+          if (task.status !== 'completed') continue
+          const startMs = new Date(task.scheduledStart).getTime()
+          const endMs = task.actualEnd
+            ? new Date(task.actualEnd).getTime()
+            : new Date(task.scheduledEnd).getTime()
+          // Corrupted: end is before start (scheduler moved start past the completion time)
+          if (endMs <= startMs) {
+            // Anchor from the reliable end timestamp backwards by duration
+            const durMs = task.durationHours * 3_600_000
+            task.scheduledStart = new Date(endMs - durMs).toISOString()
+            if (!task.actualEnd) task.scheduledEnd = new Date(endMs).toISOString()
+            corrupted.push(task.id)
+          }
+        }
+      })
+      localStorage.setItem(FLAG, '1')
+      if (corrupted.length > 0) {
+        markLocalWrite()
+        const ids = new Set(corrupted)
+        upsertTasks(get().tasks.filter(t => ids.has(t.id))).catch(console.error)
+      }
     },
 
     migratePinScheduledStarts: () => {
