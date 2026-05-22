@@ -5,7 +5,7 @@ import { isToday } from 'date-fns'
 import { useStore } from '../../store'
 import { useShallow } from 'zustand/react/shallow'
 import { TaskBar } from './TaskBar'
-import { calcLeft, generateMultiPeriodColumns, getWorkSegments, TIMELINE_PERIODS } from '../../lib/ganttLayout'
+import { calcLeft, calcWidth, generateMultiPeriodColumns, TIMELINE_PERIODS } from '../../lib/ganttLayout'
 import { useGanttTimeline } from '../../contexts/GanttTimelineContext'
 
 interface Props {
@@ -25,17 +25,6 @@ export function TaskTrack({ poolId }: Props) {
     )
   )
 
-  // Work calendar for this pool — needed to compute work segments
-  const workCalendar = useStore(
-    useShallow(s => {
-      const clientId = s.pools.find(p => p.id === poolId)?.clientId
-      return s.clients.find(c => c.id === clientId)?.workCalendar ?? null
-    })
-  )
-
-  const setEditingTask = useStore(s => s.setEditingTask)
-
-  // Project colors for extra segment rendering
   const projectColors = useStore(
     useShallow(s => Object.fromEntries(s.projects.map(p => [p.id, p.color])))
   )
@@ -52,21 +41,12 @@ export function TaskTrack({ poolId }: Props) {
 
   const taskLayouts = useMemo(() => {
     return tasks.map((task) => {
-      const effectiveEndHour = workCalendar
-        ? (task.overtime ? workCalendar.endHour + (task.overtimeHours ?? 0) : workCalendar.endHour)
-        : 24
-      const segments = workCalendar
-        ? getWorkSegments(
-            task.scheduledStart, task.scheduledEnd,
-            workCalendar, effectiveEndHour,
-            anchor, view,
-          )
-        : [{ left: calcLeft(task.scheduledStart, anchor, view), width: 4 }]
-
+      const left = calcLeft(task.scheduledStart, anchor, view)
+      const width = Math.max(calcWidth(task.scheduledStart, task.scheduledEnd, view), 4)
       const accentColor = (task.projectId && projectColors[task.projectId]) ?? '#94a3b8'
-      return { task, left: segments[0].left, width: segments[0].width, extraSegments: segments.slice(1), accentColor }
+      return { task, left, width, accentColor }
     })
-  }, [tasks, anchor, view, workCalendar, projectColors])
+  }, [tasks, anchor, view, projectColors])
 
   const nowLeft = useMemo(
     () => calcLeft(new Date().toISOString(), anchor, view),
@@ -96,27 +76,8 @@ export function TaskTrack({ poolId }: Props) {
       {/* Tasks drop zone */}
       <div ref={setNodeRef} className="relative h-full" style={{ width: totalWidth }}>
         <SortableContext items={tasks.map(t => t.id)} strategy={noopStrategy}>
-          {taskLayouts.map(({ task, left, width, extraSegments, accentColor }) => (
-            <div key={task.id}>
-              <TaskBar task={task} left={left} width={width} />
-              {extraSegments.map((seg, i) => (
-                <div
-                  key={i}
-                  className="absolute cursor-pointer"
-                  onClick={() => setEditingTask(task.id)}
-                  style={{
-                    left: seg.left,
-                    width: seg.width,
-                    top: 6,
-                    height: 36,
-                    borderRadius: 6,
-                    backgroundColor: `${accentColor}18`,
-                    boxShadow: `inset 4px 0 0 0 ${accentColor}`,
-                    border: `1px solid ${accentColor}55`,
-                  }}
-                />
-              ))}
-            </div>
+          {taskLayouts.map(({ task, left, width }) => (
+            <TaskBar key={task.id} task={task} left={left} width={width} />
           ))}
         </SortableContext>
 
