@@ -58,20 +58,10 @@ export function rescheduleAll(tasks: Task[], pools: Pool[], clients: ClientConfi
       const deps = getDeps(task)
       if (!deps.every(d => scheduled.has(d))) continue
 
-      // Completed tasks: re-derive scheduledStart from dependency chain to fix
-      // stacking caused by old scheduler moving bars to "now". scheduledEnd stays
-      // untouched — actualEnd is used via effectiveEnd for dependency computation.
+      // Completed tasks: never touch scheduledStart/End — they are historical records.
+      // effectiveEnd() already uses actualEnd for dependency computation.
+      // Visual overlap of short completed bars is handled in TaskTrack (minLeft logic).
       if (task.status === 'completed') {
-        const client2 = clientMap.get(task.clientId)
-        if (client2 && deps.length > 0) {
-          const cal2 = client2.workCalendar
-          let compStart = new Date(0)
-          for (const depId of deps) {
-            const depEnd = snapToWorkStart(effectiveEnd(taskMap.get(depId)!), cal2)
-            if (depEnd > compStart) compStart = depEnd
-          }
-          if (compStart.getTime() > 0) task.scheduledStart = compStart.toISOString()
-        }
         scheduled.add(id); remaining.delete(id); progress = true; continue
       }
 
