@@ -93,7 +93,7 @@ export function TaskBar({ task, left, width, dragDirection, style: extraStyle }:
     setOpen(v => !v)
   }
 
-  const meta = STATUS_META[task.status]
+  const meta = STATUS_META[task.status] ?? STATUS_META['pending']
   const minWidth = width >= 60
 
   const barStyle: React.CSSProperties = {
