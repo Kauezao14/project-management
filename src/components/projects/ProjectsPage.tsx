@@ -113,7 +113,7 @@ function ProgressBar({ value, color }: { value: number; color: string }) {
 }
 
 function TaskRow({ task, isCritical }: { task: Task; isCritical: boolean }) {
-  const meta = STATUS_META[task.status]
+  const meta = STATUS_META[task.status] ?? STATUS_META['pending']
   return (
     <div className={`flex items-center gap-2 py-1.5 px-2 rounded-lg text-xs ${isCritical ? 'bg-yellow-50' : 'hover:bg-gray-50'}`}>
       <span style={{ color: meta.color }} className="shrink-0">{meta.icon}</span>
